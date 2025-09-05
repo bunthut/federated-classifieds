@@ -8,6 +8,9 @@
 get_header(); ?>
 <div id="primary" class="content-area">
     <main id="main" class="site-main classyfeds-listings">
+        <div class="classyfeds-logo">
+            <img src="<?php echo esc_url( plugin_dir_url( dirname( __DIR__ ) ) . 'images/classyfeds.png' ); ?>" alt="ClassyFeds logo" />
+        </div>
         <?php
         $query = new WP_Query([
             'post_type'      => [ 'listing', 'ap_object' ],
