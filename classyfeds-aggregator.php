@@ -70,15 +70,17 @@ function classyfeds_aggregator_activate() {
 register_activation_hook( __FILE__, 'classyfeds_aggregator_activate' );
 
 /**
- * Register settings page in the admin under Settings → Classifieds Aggregator.
+ * Register settings page as top-level admin menu.
  */
 add_action( 'admin_menu', function() {
-    add_options_page(
+    add_menu_page(
         __( 'Classifieds Aggregator', 'classyfeds-aggregator' ),
-        __( 'Classifieds Aggregator', 'classyfeds-aggregator' ),
+        __( 'Classifieds', 'classyfeds-aggregator' ),
         'manage_options',
         'classyfeds-aggregator',
-        'classyfeds_aggregator_settings_page'
+        'classyfeds_aggregator_settings_page',
+        'dashicons-megaphone',
+        25
     );
 } );
 
