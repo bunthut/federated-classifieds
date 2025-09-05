@@ -24,6 +24,20 @@ add_action( 'init', function() {
         'show_in_rest' => false,
         'supports'     => [ 'title', 'editor' ],
     ] );
+
+    register_taxonomy(
+        'listing_category',
+        [ 'listing', 'ap_object' ],
+        [
+            'labels'       => [
+                'name'          => __( 'Listing Categories', 'classyfeds-aggregator' ),
+                'singular_name' => __( 'Listing Category', 'classyfeds-aggregator' ),
+            ],
+            'public'       => true,
+            'show_in_rest' => true,
+            'hierarchical' => true,
+        ]
+    );
 } );
 
 /**
@@ -264,7 +278,7 @@ function classyfeds_aggregator_listings_handler() {
             }
         }
 
-        $cats = wp_get_post_terms( $post->ID, 'category', [ 'fields' => 'names' ] );
+        $cats = wp_get_post_terms( $post->ID, 'listing_category', [ 'fields' => 'names' ] );
         $items[] = [
             '@context'     => 'https://www.w3.org/ns/activitystreams',
             'id'           => get_permalink( $post ),
