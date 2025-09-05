@@ -23,8 +23,21 @@ get_header(); ?>
         if ( $query->have_posts() ) :
             while ( $query->have_posts() ) :
                 $query->the_post();
+                $data = 'ap_object' === get_post_type() ? json_decode( get_the_content(), true ) : [];
                 ?>
                 <article id="post-<?php the_ID(); ?>" <?php post_class('classyfeds-listing'); ?>>
+                    <?php if ( 'listing' === get_post_type() && has_post_thumbnail() ) : ?>
+                        <div class="classyfeds-listing-image">
+                            <?php the_post_thumbnail( 'medium' ); ?>
+                        </div>
+                    <?php elseif ( isset( $data['image'] ) ) :
+                        $img = is_array( $data['image'] ) ? ( $data['image']['url'] ?? '' ) : $data['image'];
+                        if ( $img ) : ?>
+                            <div class="classyfeds-listing-image">
+                                <img src="<?php echo esc_url( $img ); ?>" alt="" />
+                            </div>
+                        <?php endif;
+                    endif; ?>
                     <header class="entry-header">
                         <?php if ( 'listing' === get_post_type() ) : ?>
                             <h2 class="entry-title"><a href="<?php the_permalink(); ?>"><?php the_title(); ?></a></h2>
@@ -37,7 +50,6 @@ get_header(); ?>
                         if ( 'listing' === get_post_type() ) {
                             the_excerpt();
                         } else {
-                            $data = json_decode( get_the_content(), true );
                             if ( isset( $data['content'] ) ) {
                                 echo wp_kses_post( wpautop( $data['content'] ) );
                             } elseif ( isset( $data['summary'] ) ) {
