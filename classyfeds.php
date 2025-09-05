@@ -124,6 +124,28 @@ add_action( 'save_post_listing', function( $post_id, $post, $update ) {
 }, 10, 3 );
 
 /**
+ * Migrate legacy option names to their classyfeds_* equivalents.
+ */
+function classyfeds_migrate_options() {
+    $map = [
+        'fed_classifieds_form_page_id'  => 'classyfeds_form_page_id',
+        'fed_classifieds_publish_roles' => 'classyfeds_publish_roles',
+        'fed_classifieds_remote_inbox'  => 'classyfeds_remote_inbox',
+    ];
+
+    foreach ( $map as $old => $new ) {
+        $old_value = get_option( $old, null );
+        if ( null !== $old_value && false === get_option( $new, false ) ) {
+            update_option( $new, $old_value );
+        }
+        if ( null !== $old_value ) {
+            delete_option( $old );
+        }
+    }
+}
+add_action( 'plugins_loaded', 'classyfeds_migrate_options' );
+
+/**
  * Handle plugin activation tasks.
  *
  * Creates the "Classifieds" page if it does not exist and schedules the
@@ -189,7 +211,7 @@ function classyfeds_activate() {
     }
 
     // Ensure a submission page exists with the listing form shortcode.
-    $form_page_id = (int) get_option( 'fed_classifieds_form_page_id' );
+    $form_page_id = (int) get_option( 'classyfeds_form_page_id' );
     if ( $form_page_id && get_post( $form_page_id ) ) {
         // Page already exists and is stored.
     } else {
@@ -199,7 +221,7 @@ function classyfeds_activate() {
         if ( ! $form_page_id ) {
             $form_page_id = wp_insert_post(
                 [
-                    'post_title'   => __( 'Submit Listing', 'fed-classifieds' ),
+                    'post_title'   => __( 'Submit Listing', 'classyfeds' ),
                     'post_name'    => 'submit-listing',
                     'post_status'  => 'publish',
                     'post_type'    => 'page',
@@ -209,14 +231,14 @@ function classyfeds_activate() {
         }
 
         if ( $form_page_id ) {
-            update_option( 'fed_classifieds_form_page_id', $form_page_id );
+            update_option( 'classyfeds_form_page_id', $form_page_id );
         }
     }
 
     // Register custom capability and assign to default roles.
     add_role(
         'listing_contributor',
-        __( 'Listing Contributor', 'fed-classifieds' ),
+        __( 'Listing Contributor', 'classyfeds' ),
         [
             'read'             => true,
             'publish_listings' => true,
@@ -224,7 +246,7 @@ function classyfeds_activate() {
     );
 
     $default_roles = [ 'author', 'listing_contributor' ];
-    update_option( 'fed_classifieds_publish_roles', $default_roles );
+    update_option( 'classyfeds_publish_roles', $default_roles );
 
     foreach ( $default_roles as $role_name ) {
         $role = get_role( $role_name );
@@ -249,29 +271,29 @@ register_deactivation_hook( __FILE__, function() {
  */
 add_action( 'admin_menu', function() {
     add_options_page(
-        __( 'Classifieds', 'fed-classifieds' ),
-        __( 'Classifieds', 'fed-classifieds' ),
+        __( 'Classifieds', 'classyfeds' ),
+        __( 'Classifieds', 'classyfeds' ),
         'manage_options',
-        'fed-classifieds',
-        'fed_classifieds_settings_page'
+        'classyfeds',
+        'classyfeds_settings_page'
     );
 } );
 
 /**
  * Render settings page for selecting roles that may publish listings.
  */
-function fed_classifieds_settings_page() {
+function classyfeds_settings_page() {
     if ( ! current_user_can( 'manage_options' ) ) {
         return;
     }
 
     $editable_roles = get_editable_roles();
-    $selected       = (array) get_option( 'fed_classifieds_publish_roles', [] );
+    $selected       = (array) get_option( 'classyfeds_publish_roles', [] );
     $message        = '';
 
-    if ( isset( $_POST['fed_classifieds_save'] ) && check_admin_referer( 'fed_classifieds_save_settings', 'fed_classifieds_nonce' ) ) {
+    if ( isset( $_POST['classyfeds_save'] ) && check_admin_referer( 'classyfeds_save_settings', 'classyfeds_nonce' ) ) {
         $selected = isset( $_POST['publish_roles'] ) ? array_map( 'sanitize_text_field', (array) wp_unslash( $_POST['publish_roles'] ) ) : [];
-        update_option( 'fed_classifieds_publish_roles', $selected );
+        update_option( 'classyfeds_publish_roles', $selected );
 
         foreach ( $editable_roles as $role_key => $details ) {
             $role = get_role( $role_key );
@@ -284,31 +306,36 @@ function fed_classifieds_settings_page() {
                 $role->remove_cap( 'publish_listings' );
             }
         }
-        $message = __( 'Settings saved.', 'fed-classifieds' );
+        $message = __( 'Settings saved.', 'classyfeds' );
     }
 
     echo '<div class="wrap">';
-    echo '<h1>' . esc_html__( 'Classifieds', 'fed-classifieds' ) . '</h1>';
+    echo '<h1>' . esc_html__( 'Classifieds', 'classyfeds' ) . '</h1>';
 
     if ( $message ) {
         echo '<div class="updated"><p>' . esc_html( $message ) . '</p></div>';
     }
 
     echo '<form method="post">';
-    wp_nonce_field( 'fed_classifieds_save_settings', 'fed_classifieds_nonce' );
+    wp_nonce_field( 'classyfeds_save_settings', 'classyfeds_nonce' );
 
     echo '<table class="form-table">';
-    echo '<tr><th scope="row">' . esc_html__( 'Roles that can publish listings', 'fed-classifieds' ) . '</th><td>';
+    echo '<tr><th scope="row">' . esc_html__( 'Roles that can publish listings', 'classyfeds' ) . '</th><td>';
     foreach ( $editable_roles as $role_key => $details ) {
         echo '<label><input type="checkbox" name="publish_roles[]" value="' . esc_attr( $role_key ) . '" ' . checked( in_array( $role_key, $selected, true ), true, false ) . ' /> ' . esc_html( $details['name'] ) . '</label><br />';
     }
     echo '</td></tr>';
     echo '</table>';
 
-    submit_button( __( 'Save Changes', 'fed-classifieds' ), 'primary', 'fed_classifieds_save' );
+    submit_button( __( 'Save Changes', 'classyfeds' ), 'primary', 'classyfeds_save' );
 
     echo '</form>';
     echo '</div>';
+}
+
+// Backward-compatibility wrapper.
+function fed_classifieds_settings_page() {
+    classyfeds_settings_page();
 }
 
 add_action( 'classyfeds_expire_event', function() {
@@ -550,6 +577,8 @@ function classyfeds_listings_handler( WP_REST_Request $request ) {
 }
 
 add_shortcode( 'classyfeds_form', 'classyfeds_form_shortcode' );
+// Backward compatibility.
+add_shortcode( 'fed_classifieds_form', 'classyfeds_form_shortcode' );
 
 /**
  * Shortcode handler for `[classyfeds_form]`.
@@ -607,7 +636,7 @@ function classyfeds_form_shortcode() {
                     update_post_meta( $post_id, '_price', $price );
                     update_post_meta( $post_id, '_location', $location );
 
-                    $remote = get_option( 'fed_classifieds_remote_inbox' );
+                    $remote = get_option( 'classyfeds_remote_inbox' );
                     if ( $remote ) {
                         $payload = [
                             '@context' => 'https://www.w3.org/ns/activitystreams',
