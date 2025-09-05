@@ -23,6 +23,7 @@ add_action( 'init', function() {
         'has_archive'  => true,
         'show_in_rest' => true,
         'supports'     => [ 'title', 'editor', 'thumbnail' ],
+        'taxonomies'   => [ 'category', 'post_tag' ],
         'rewrite'      => [ 'slug' => 'listings' ],
     ] );
 } );
