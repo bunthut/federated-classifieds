@@ -258,6 +258,16 @@ add_action( 'rest_api_init', function() {
             'permission_callback' => '__return_true',
         ]
     );
+
+    register_rest_route(
+        'fed-classifieds/v1',
+        '/listings',
+        [
+            'methods'             => WP_REST_Server::READABLE,
+            'callback'            => 'fed_classifieds_listings_handler',
+            'permission_callback' => '__return_true',
+        ]
+    );
 } );
 
 /**
@@ -297,6 +307,57 @@ function fed_classifieds_inbox_handler( WP_REST_Request $request ) {
     }
 
     return new WP_REST_Response( [ 'stored' => $post_id ], 202 );
+}
+
+/**
+ * Retrieve listings and ActivityPub objects as an ActivityStreams collection.
+ *
+ * @param WP_REST_Request $request Request object.
+ * @return WP_REST_Response Response.
+ */
+function fed_classifieds_listings_handler( WP_REST_Request $request ) {
+    $query = new WP_Query(
+        [
+            'post_type'      => [ 'listing', 'ap_object' ],
+            'post_status'    => 'publish',
+            'posts_per_page' => -1,
+        ]
+    );
+
+    $items = [];
+
+    foreach ( $query->posts as $post ) {
+        if ( 'ap_object' === $post->post_type ) {
+            $data = json_decode( $post->post_content, true );
+            if ( is_array( $data ) ) {
+                if ( empty( $data['@context'] ) ) {
+                    $data['@context'] = 'https://www.w3.org/ns/activitystreams';
+                }
+                $items[] = $data;
+                continue;
+            }
+        }
+
+        $items[] = [
+            '@context' => 'https://www.w3.org/ns/activitystreams',
+            'id'       => get_permalink( $post ),
+            'type'     => 'Note',
+            'name'     => get_the_title( $post ),
+            'content'  => apply_filters( 'the_content', $post->post_content ),
+            'url'      => get_permalink( $post ),
+            'published'=> mysql2date( 'c', $post->post_date_gmt, false ),
+        ];
+    }
+
+    $collection = [
+        '@context'     => 'https://www.w3.org/ns/activitystreams',
+        'id'           => rest_url( 'fed-classifieds/v1/listings' ),
+        'type'         => 'OrderedCollection',
+        'totalItems'   => count( $items ),
+        'orderedItems' => $items,
+    ];
+
+    return new WP_REST_Response( $collection );
 }
 
 /**
