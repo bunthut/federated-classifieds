@@ -28,6 +28,26 @@ add_action( 'init', function() {
 } );
 
 /**
+ * Add "Typ" dropdown to the listing editor.
+ */
+add_action( 'add_meta_boxes', function() {
+    add_meta_box(
+        'listing_type',
+        __( 'Typ', 'fed-classifieds' ),
+        function( $post ) {
+            $value = get_post_meta( $post->ID, '_listing_type', true );
+            wp_nonce_field( 'save_listing_type', 'listing_type_nonce' );
+            echo '<select name="listing_type" id="listing_type" style="width:100%">';
+            echo '<option value="Angebot"' . selected( $value, 'Angebot', false ) . '>' . esc_html__( 'Angebot', 'fed-classifieds' ) . '</option>';
+            echo '<option value="Gesuch"' . selected( $value, 'Gesuch', false ) . '>' . esc_html__( 'Gesuch', 'fed-classifieds' ) . '</option>';
+            echo '</select>';
+        },
+        'listing',
+        'side'
+    );
+} );
+
+/**
  * Register custom post status "expired".
  */
 add_action( 'init', function() {
@@ -48,6 +68,13 @@ add_action( 'init', function() {
 add_action( 'save_post_listing', function( $post_id, $post, $update ) {
     if ( wp_is_post_autosave( $post_id ) || wp_is_post_revision( $post_id ) ) {
         return;
+    }
+
+    if ( isset( $_POST['listing_type_nonce'] ) && wp_verify_nonce( $_POST['listing_type_nonce'], 'save_listing_type' ) ) {
+        $type = isset( $_POST['listing_type'] ) ? sanitize_text_field( wp_unslash( $_POST['listing_type'] ) ) : '';
+        if ( $type ) {
+            update_post_meta( $post_id, '_listing_type', $type );
+        }
     }
 
     $expires = get_post_meta( $post_id, '_expires_at', true );

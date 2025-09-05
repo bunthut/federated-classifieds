@@ -24,7 +24,13 @@ get_header(); ?>
                         <h2 class="entry-title"><a href="<?php the_permalink(); ?>"><?php the_title(); ?></a></h2>
                     </header>
                     <div class="entry-content">
-                        <?php the_excerpt(); ?>
+                        <?php
+                        $type = get_post_meta( get_the_ID(), '_listing_type', true );
+                        if ( $type ) {
+                            echo '<p class="listing-type">' . esc_html( $type ) . '</p>';
+                        }
+                        the_excerpt();
+                        ?>
                     </div>
                 </article>
                 <?php
