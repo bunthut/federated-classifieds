@@ -26,7 +26,24 @@ add_action( 'init', function() {
         'taxonomies'   => [ 'category', 'post_tag' ],
         'rewrite'      => [ 'slug' => 'listings' ],
     ] );
-} );
+});
+
+/**
+ * Register the "external_listing" custom post type for remote listings.
+ */
+add_action( 'init', function() {
+    register_post_type( 'external_listing', [
+        'labels' => [
+            'name'          => __( 'External Listings', 'fed-classifieds' ),
+            'singular_name' => __( 'External Listing', 'fed-classifieds' ),
+        ],
+        'public'       => true,
+        'has_archive'  => false,
+        'show_in_rest' => true,
+        'supports'     => [ 'title', 'editor', 'thumbnail' ],
+        'rewrite'      => [ 'slug' => 'external-listings' ],
+    ] );
+});
 
 /**
  * Add "Typ" dropdown to the listing editor.
@@ -84,25 +101,11 @@ add_action( 'init', function() {
 });
 
 /**
- * Set default expiration date (60 days) when a listing is saved.
+ * Add a meta box for external listing URLs and save the value.
  */
-add_action( 'save_post_listing', function( $post_id, $post, $update ) {
-    if ( wp_is_post_autosave( $post_id ) || wp_is_post_revision( $post_id ) ) {
-        return;
-    }
-
-    if ( isset( $_POST['listing_type_nonce'] ) && wp_verify_nonce( $_POST['listing_type_nonce'], 'save_listing_type' ) ) {
-        $type = isset( $_POST['listing_type'] ) ? sanitize_text_field( wp_unslash( $_POST['listing_type'] ) ) : '';
-        if ( $type ) {
-            update_post_meta( $post_id, '_listing_type', $type );
-        }
-    }
-
-    $expires = get_post_meta( $post_id, '_expires_at', true );
-    if ( ! $expires ) {
-        $expires = strtotime( '+60 days', current_time( 'timestamp' ) );
-        update_post_meta( $post_id, '_expires_at', $expires );
-    }
-}, 10, 3 );
-
-/
+add_action( 'add_meta_boxes', function() {
+    add_meta_box(
+        'external_listing_url',
+        __( 'External URL', 'fed-classifieds' ),
+        function( $post ) {
+            $url = get_post_meta( $post->ID,
