@@ -10,6 +10,7 @@ A minimal WordPress plugin providing a `listing` custom post type, JSON-LD marku
 - Intended to work alongside companion plugins such as [ActivityPub](https://wordpress.org/plugins/activitypub/) and [WebSub](https://wordpress.org/plugins/websub-publisher/).
 - Provides a `[fed_classifieds_form]` shortcode for frontend submissions that can forward listings to a configurable ActivityPub inbox.
 - On activation some default categories common to classifieds sites are created for convenience.
+- Automatically creates a "Submit Listing" page with the shortcode, including required price and location fields.
 - Exposes `/wp-json/fed-classifieds/v1/inbox` (POST) for incoming ActivityPub objects and `/wp-json/fed-classifieds/v1/listings` (GET) to retrieve them together with local listings.
 - Creates a "Classifieds" page on activation and stores its ID in the `fed_classifieds_page_id` option.
 
