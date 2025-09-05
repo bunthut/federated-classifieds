@@ -2,11 +2,11 @@
 Contributors: thomi, amis
 Requires at least: 5.0
 Tested up to: 6.4
-Stable tag: 0.1.0
+Stable tag: 0.1.1
 License: GPL-2.0+
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-A minimal plugin providing a `listing` custom post type, JSON-LD markup, and automatic expiration for federated classifieds.
+A minimal plugin providing a `listing` custom post type, JSON-LD markup, automatic expiration, and a frontend form that can forward listings to an ActivityPub inbox.
 
 == Description ==
 This plugin registers a "listing" custom post type with an expiration date and outputs structured JSON-LD data for each listing.
@@ -16,5 +16,8 @@ This plugin registers a "listing" custom post type with an expiration date and o
 2. Activate the plugin through the "Plugins" menu in WordPress.
 
 == Changelog ==
+= 0.1.1 =
+* Added frontend listing submission shortcode with ActivityPub forwarding.
+* Created default categories on activation.
 = 0.1.0 =
 * Initial release.

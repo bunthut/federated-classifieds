@@ -8,6 +8,8 @@ A minimal WordPress plugin providing a `listing` custom post type, JSON-LD marku
 - Adds default expiration 60 days after publish and moves listings to an `expired` status via daily cron.
 - Outputs [schema.org](https://schema.org) Offer data as JSON-LD for each listing.
 - Intended to work alongside companion plugins such as [ActivityPub](https://wordpress.org/plugins/activitypub/) and [WebSub](https://wordpress.org/plugins/websub-publisher/).
+- Provides a `[fed_classifieds_form]` shortcode for frontend submissions that can forward listings to a configurable ActivityPub inbox.
+- On activation some default categories common to classifieds sites are created for convenience.
 
 ## Build
 

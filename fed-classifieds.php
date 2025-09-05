@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Fed Classifieds (MVP)
  * Description: Custom post type "listing" with JSON-LD output and auto-expiration for a federated classifieds network.
- * Version: 0.1.0
+ * Version: 0.1.1
  * Author: thomi@etik.com + amis
  */
 
@@ -140,6 +140,22 @@ function fed_classifieds_activate() {
 
     if ( ! wp_next_scheduled( 'fed_classifieds_expire_event' ) ) {
         wp_schedule_event( time(), 'daily', 'fed_classifieds_expire_event' );
+    }
+
+    // Insert some default categories similar to popular classifieds sites.
+    $default_categories = [
+        'Auto & Motorrad',
+        'Immobilien',
+        'Jobs',
+        'Elektronik',
+        'Haushalt',
+        'Mode & Beauty',
+        'Freizeit & Sport',
+    ];
+    foreach ( $default_categories as $cat ) {
+        if ( ! term_exists( $cat, 'category' ) ) {
+            wp_insert_term( $cat, 'category' );
+        }
     }
 
     // Flush rewrite rules to ensure custom routes are registered.
@@ -320,4 +336,148 @@ function fed_classifieds_render_dashboard() {
         </ul>
     </div>
     <?php
+}
+
+/**
+ * Settings page for configuring remote ActivityPub inbox.
+ */
+add_action( 'admin_menu', function() {
+    add_options_page(
+        __( 'Classifieds Settings', 'fed-classifieds' ),
+        __( 'Classifieds', 'fed-classifieds' ),
+        'manage_options',
+        'fed-classifieds-settings',
+        'fed_classifieds_settings_page'
+    );
+} );
+
+/**
+ * Render the settings page.
+ */
+function fed_classifieds_settings_page() {
+    if ( ! current_user_can( 'manage_options' ) ) {
+        return;
+    }
+
+    $message = '';
+
+    if ( isset( $_POST['fed_classifieds_settings_save'] ) && check_admin_referer( 'fed_classifieds_settings', 'fed_classifieds_settings_nonce' ) ) {
+        $url = isset( $_POST['fed_classifieds_remote_inbox'] ) ? esc_url_raw( wp_unslash( $_POST['fed_classifieds_remote_inbox'] ) ) : '';
+        update_option( 'fed_classifieds_remote_inbox', $url );
+        $message = __( 'Settings saved.', 'fed-classifieds' );
+    }
+
+    $current = get_option( 'fed_classifieds_remote_inbox', '' );
+
+    echo '<div class="wrap">';
+    echo '<h1>' . esc_html__( 'Classifieds Settings', 'fed-classifieds' ) . '</h1>';
+
+    if ( $message ) {
+        echo '<div class="updated"><p>' . esc_html( $message ) . '</p></div>';
+    }
+
+    echo '<form method="post">';
+    wp_nonce_field( 'fed_classifieds_settings', 'fed_classifieds_settings_nonce' );
+    echo '<table class="form-table">';
+    echo '<tr><th scope="row">' . esc_html__( 'Remote inbox URL', 'fed-classifieds' ) . '</th><td><input type="url" name="fed_classifieds_remote_inbox" value="' . esc_attr( $current ) . '" class="regular-text" /></td></tr>';
+    echo '</table>';
+    submit_button( __( 'Save Changes', 'fed-classifieds' ), 'primary', 'fed_classifieds_settings_save' );
+    echo '</form>';
+    echo '</div>';
+}
+
+/**
+ * Shortcode for frontend listing submission form.
+ */
+add_shortcode( 'fed_classifieds_form', 'fed_classifieds_form_shortcode' );
+
+/**
+ * Render and process the listing submission form.
+ *
+ * @return string
+ */
+function fed_classifieds_form_shortcode() {
+    $success = false;
+    $error   = false;
+
+    if ( isset( $_POST['fed_classifieds_submit'] ) && isset( $_POST['fed_classifieds_nonce'] ) && wp_verify_nonce( $_POST['fed_classifieds_nonce'], 'fed_classifieds_new_listing' ) ) {
+        $title   = isset( $_POST['listing_title'] ) ? sanitize_text_field( wp_unslash( $_POST['listing_title'] ) ) : '';
+        $content = isset( $_POST['listing_content'] ) ? wp_kses_post( wp_unslash( $_POST['listing_content'] ) ) : '';
+        $type    = isset( $_POST['listing_type'] ) ? sanitize_text_field( wp_unslash( $_POST['listing_type'] ) ) : '';
+        $cat_id  = isset( $_POST['listing_category'] ) ? (int) $_POST['listing_category'] : 0;
+
+        $post_id = wp_insert_post( [
+            'post_type'   => 'listing',
+            'post_status' => 'publish',
+            'post_title'  => $title,
+            'post_content'=> $content,
+            'tax_input'   => [ 'category' => [ $cat_id ] ],
+        ], true );
+
+        if ( ! is_wp_error( $post_id ) ) {
+            if ( $type ) {
+                update_post_meta( $post_id, '_listing_type', $type );
+            }
+
+            $remote = get_option( 'fed_classifieds_remote_inbox', '' );
+            if ( $remote ) {
+                $cat_name = $cat_id ? get_term_field( 'name', $cat_id, 'category' ) : '';
+                $payload  = [
+                    '@context'    => 'https://www.w3.org/ns/activitystreams',
+                    'type'        => 'Note',
+                    'name'        => $title,
+                    'content'     => $content,
+                    'category'    => $cat_name,
+                    'listingType' => $type,
+                ];
+                wp_remote_post( $remote, [
+                    'headers' => [ 'Content-Type' => 'application/json' ],
+                    'body'    => wp_json_encode( $payload ),
+                    'timeout' => 15,
+                ] );
+            }
+
+            $success = true;
+        } else {
+            $error = true;
+        }
+    }
+
+    wp_enqueue_style( 'fed-classifieds', plugin_dir_url( __FILE__ ) . 'assets/css/fed-classifieds.css', [], '0.1.0' );
+
+    $cats = get_terms( [ 'taxonomy' => 'category', 'hide_empty' => false ] );
+
+    ob_start();
+
+    if ( $success ) {
+        echo '<p class="fed-classifieds-success">' . esc_html__( 'Listing submitted.', 'fed-classifieds' ) . '</p>';
+    } elseif ( $error ) {
+        echo '<p class="fed-classifieds-error">' . esc_html__( 'Could not submit listing.', 'fed-classifieds' ) . '</p>';
+    }
+
+    echo '<form method="post" class="fed-classifieds-form">';
+    wp_nonce_field( 'fed_classifieds_new_listing', 'fed_classifieds_nonce' );
+    echo '<p><label for="listing_title">' . esc_html__( 'Title', 'fed-classifieds' ) . '</label><br />';
+    echo '<input type="text" id="listing_title" name="listing_title" required /></p>';
+
+    echo '<p><label for="listing_content">' . esc_html__( 'Description', 'fed-classifieds' ) . '</label><br />';
+    echo '<textarea id="listing_content" name="listing_content" rows="5" required></textarea></p>';
+
+    echo '<p><label for="listing_type">' . esc_html__( 'Typ', 'fed-classifieds' ) . '</label><br />';
+    echo '<select id="listing_type" name="listing_type">';
+    echo '<option value="Angebot">' . esc_html__( 'Angebot', 'fed-classifieds' ) . '</option>';
+    echo '<option value="Gesuch">' . esc_html__( 'Gesuch', 'fed-classifieds' ) . '</option>';
+    echo '</select></p>';
+
+    echo '<p><label for="listing_category">' . esc_html__( 'Category', 'fed-classifieds' ) . '</label><br />';
+    echo '<select id="listing_category" name="listing_category">';
+    foreach ( $cats as $cat ) {
+        echo '<option value="' . esc_attr( $cat->term_id ) . '">' . esc_html( $cat->name ) . '</option>';
+    }
+    echo '</select></p>';
+
+    echo '<p><input type="submit" name="fed_classifieds_submit" value="' . esc_attr__( 'Submit', 'fed-classifieds' ) . '" /></p>';
+    echo '</form>';
+
+    return ob_get_clean();
 }
