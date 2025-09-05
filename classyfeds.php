@@ -1,6 +1,6 @@
 <?php
 /**
- * Plugin Name: Fed Classifieds (MVP)
+ * Plugin Name: Classyfeds (MVP)
  * Description: Custom post type "listing" with JSON-LD output and auto-expiration for a federated classifieds network.
  * Version: 0.1.1
  * Author: thomi@etik.com + amis
@@ -16,8 +16,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 add_action( 'init', function() {
     register_post_type( 'listing', [
         'labels' => [
-            'name'          => __( 'Listings', 'fed-classifieds' ),
-            'singular_name' => __( 'Listing', 'fed-classifieds' ),
+            'name'          => __( 'Listings', 'classyfeds' ),
+            'singular_name' => __( 'Listing', 'classyfeds' ),
         ],
         'public'       => true,
         'has_archive'  => true,
@@ -35,13 +35,13 @@ add_action( 'init', function() {
 add_action( 'add_meta_boxes', function() {
     add_meta_box(
         'listing_type',
-        __( 'Typ', 'fed-classifieds' ),
+        __( 'Typ', 'classyfeds' ),
         function( $post ) {
             $value = get_post_meta( $post->ID, '_listing_type', true );
             wp_nonce_field( 'save_listing_type', 'listing_type_nonce' );
             echo '<select name="listing_type" id="listing_type" style="width:100%">';
-            echo '<option value="Angebot"' . selected( $value, 'Angebot', false ) . '>' . esc_html__( 'Angebot', 'fed-classifieds' ) . '</option>';
-            echo '<option value="Gesuch"' . selected( $value, 'Gesuch', false ) . '>' . esc_html__( 'Gesuch', 'fed-classifieds' ) . '</option>';
+            echo '<option value="Angebot"' . selected( $value, 'Angebot', false ) . '>' . esc_html__( 'Angebot', 'classyfeds' ) . '</option>';
+            echo '<option value="Gesuch"' . selected( $value, 'Gesuch', false ) . '>' . esc_html__( 'Gesuch', 'classyfeds' ) . '</option>';
             echo '</select>';
         },
         'listing',
@@ -59,8 +59,8 @@ add_action( 'add_meta_boxes', function() {
 add_action( 'init', function() {
     register_post_type( 'ap_object', [
         'labels' => [
-            'name'          => __( 'ActivityPub Objects', 'fed-classifieds' ),
-            'singular_name' => __( 'ActivityPub Object', 'fed-classifieds' ),
+            'name'          => __( 'ActivityPub Objects', 'classyfeds' ),
+            'singular_name' => __( 'ActivityPub Object', 'classyfeds' ),
         ],
         'public'       => false,
         'show_ui'      => false,
@@ -74,13 +74,13 @@ add_action( 'init', function() {
  */
 add_action( 'init', function() {
     register_post_status( 'expired', [
-        'label'                     => _x( 'Expired', 'post', 'fed-classifieds' ),
+        'label'                     => _x( 'Expired', 'post', 'classyfeds' ),
         'public'                    => false,
         'internal'                  => false,
         'exclude_from_search'       => true,
         'show_in_admin_all_list'    => true,
         'show_in_admin_status_list' => true,
-        'label_count'               => _n_noop( 'Expired <span class="count">(%s)</span>', 'Expired <span class="count">(%s)</span>', 'fed-classifieds' ),
+        'label_count'               => _n_noop( 'Expired <span class="count">(%s)</span>', 'Expired <span class="count">(%s)</span>', 'classyfeds' ),
     ] );
 } );
 
@@ -115,8 +115,8 @@ add_action( 'save_post_listing', function( $post_id, $post, $update ) {
  * Creates the "Classifieds" page if it does not exist and schedules the
  * daily expiration event.
  */
-function fed_classifieds_activate() {
-    $page_id = (int) get_option( 'fed_classifieds_page_id' );
+function classyfeds_activate() {
+    $page_id = (int) get_option( 'classyfeds_page_id' );
 
     if ( $page_id && get_post( $page_id ) ) {
         // Page already exists and is stored in options.
@@ -126,7 +126,7 @@ function fed_classifieds_activate() {
 
         if ( ! $page_id ) {
             $page_id = wp_insert_post( [
-                'post_title'  => __( 'Classifieds', 'fed-classifieds' ),
+                'post_title'  => __( 'Classifieds', 'classyfeds' ),
                 'post_name'   => 'classifieds',
                 'post_status' => 'publish',
                 'post_type'   => 'page',
@@ -134,12 +134,12 @@ function fed_classifieds_activate() {
         }
 
         if ( $page_id ) {
-            update_option( 'fed_classifieds_page_id', $page_id );
+            update_option( 'classyfeds_page_id', $page_id );
         }
     }
 
-    if ( ! wp_next_scheduled( 'fed_classifieds_expire_event' ) ) {
-        wp_schedule_event( time(), 'daily', 'fed_classifieds_expire_event' );
+    if ( ! wp_next_scheduled( 'classyfeds_expire_event' ) ) {
+        wp_schedule_event( time(), 'daily', 'classyfeds_expire_event' );
     }
 
     // Insert some default categories similar to popular classifieds sites.
@@ -162,14 +162,14 @@ function fed_classifieds_activate() {
     flush_rewrite_rules();
 }
 
-register_activation_hook( __FILE__, 'fed_classifieds_activate' );
+register_activation_hook( __FILE__, 'classyfeds_activate' );
 
 register_deactivation_hook( __FILE__, function() {
-    wp_clear_scheduled_hook( 'fed_classifieds_expire_event' );
+    wp_clear_scheduled_hook( 'classyfeds_expire_event' );
     flush_rewrite_rules();
 } );
 
-add_action( 'fed_classifieds_expire_event', function() {
+add_action( 'classyfeds_expire_event', function() {
     $now   = current_time( 'timestamp' );
     $posts = get_posts( [
         'post_type'   => 'listing',
@@ -224,7 +224,7 @@ add_action( 'wp_head', function() {
  * Load template for the Classifieds page.
  */
 add_filter( 'template_include', function( $template ) {
-    $page_id = (int) get_option( 'fed_classifieds_page_id' );
+    $page_id = (int) get_option( 'classyfeds_page_id' );
     if ( $page_id && is_page( $page_id ) ) {
         $new_template = plugin_dir_path( __FILE__ ) . 'templates/listings-page.php';
         if ( file_exists( $new_template ) ) {
@@ -238,10 +238,10 @@ add_filter( 'template_include', function( $template ) {
  * Enqueue frontend assets for the Classifieds page.
  */
 add_action( 'wp_enqueue_scripts', function() {
-    $page_id = (int) get_option( 'fed_classifieds_page_id' );
+    $page_id = (int) get_option( 'classyfeds_page_id' );
     if ( $page_id && is_page( $page_id ) ) {
-        wp_enqueue_style( 'fed-classifieds', plugin_dir_url( __FILE__ ) . 'assets/css/fed-classifieds.css', [], '0.1.0' );
-        wp_enqueue_script( 'fed-classifieds', plugin_dir_url( __FILE__ ) . 'assets/js/fed-classifieds.js', [ 'jquery' ], '0.1.0', true );
+        wp_enqueue_style( 'classyfeds', plugin_dir_url( __FILE__ ) . 'assets/css/classyfeds.css', [], '0.1.0' );
+        wp_enqueue_script( 'classyfeds', plugin_dir_url( __FILE__ ) . 'assets/js/classyfeds.js', [ 'jquery' ], '0.1.0', true );
     }
 } );
 
@@ -250,21 +250,21 @@ add_action( 'wp_enqueue_scripts', function() {
  */
 add_action( 'rest_api_init', function() {
     register_rest_route(
-        'fed-classifieds/v1',
+        'classyfeds/v1',
         '/inbox',
         [
             'methods'             => WP_REST_Server::CREATABLE,
-            'callback'            => 'fed_classifieds_inbox_handler',
+            'callback'            => 'classyfeds_inbox_handler',
             'permission_callback' => '__return_true',
         ]
     );
 
     register_rest_route(
-        'fed-classifieds/v1',
+        'classyfeds/v1',
         '/listings',
         [
             'methods'             => WP_REST_Server::READABLE,
-            'callback'            => 'fed_classifieds_listings_handler',
+            'callback'            => 'classyfeds_listings_handler',
             'permission_callback' => '__return_true',
         ]
     );
@@ -278,7 +278,7 @@ add_action( 'rest_api_init', function() {
  * @param WP_REST_Request $request Request object.
  * @return WP_REST_Response Response.
  */
-function fed_classifieds_inbox_handler( WP_REST_Request $request ) {
+function classyfeds_inbox_handler( WP_REST_Request $request ) {
     $activity = $request->get_json_params();
 
     if ( empty( $activity ) || ! is_array( $activity ) ) {
@@ -296,7 +296,7 @@ function fed_classifieds_inbox_handler( WP_REST_Request $request ) {
     } elseif ( isset( $object['summary'] ) ) {
         $title = sanitize_text_field( $object['summary'] );
     } else {
-        $title = __( 'Remote ActivityPub Object', 'fed-classifieds' );
+        $title = __( 'Remote ActivityPub Object', 'classyfeds' );
     }
 
     $post_id = wp_insert_post(
@@ -323,7 +323,7 @@ function fed_classifieds_inbox_handler( WP_REST_Request $request ) {
  * @param WP_REST_Request $request Request object.
  * @return WP_REST_Response Response.
  */
-function fed_classifieds_listings_handler( WP_REST_Request $request ) {
+function classyfeds_listings_handler( WP_REST_Request $request ) {
     $query = new WP_Query(
         [
             'post_type'      => [ 'listing', 'ap_object' ],
@@ -363,7 +363,7 @@ function fed_classifieds_listings_handler( WP_REST_Request $request ) {
 
     $collection = [
         '@context'     => 'https://www.w3.org/ns/activitystreams',
-        'id'           => rest_url( 'fed-classifieds/v1/listings' ),
+        'id'           => rest_url( 'classyfeds/v1/listings' ),
         'type'         => 'OrderedCollection',
         'totalItems'   => count( $items ),
         'orderedItems' => $items,
@@ -372,24 +372,24 @@ function fed_classifieds_listings_handler( WP_REST_Request $request ) {
     return new WP_REST_Response( $collection );
 }
 
-add_shortcode( 'fed_classifieds_form', 'fed_classifieds_form_shortcode' );
+add_shortcode( 'classyfeds_form', 'classyfeds_form_shortcode' );
 
 /**
- * Shortcode handler for `[fed_classifieds_form]`.
+ * Shortcode handler for `[classyfeds_form]`.
  *
  * Displays a submission form that allows visitors to create new listings.
  * Submitted listings are stored locally and optionally forwarded to a
- * configurable ActivityPub inbox via the `fed_classifieds_remote_inbox`
+ * configurable ActivityPub inbox via the `classyfeds_remote_inbox`
  * option.
  *
  * @return string Form HTML.
  */
-function fed_classifieds_form_shortcode() {
+function classyfeds_form_shortcode() {
     $success = false;
     $error   = false;
 
-    if ( isset( $_POST['fed_classifieds_submit'] ) ) {
-        if ( ! isset( $_POST['fed_classifieds_nonce'] ) || ! wp_verify_nonce( $_POST['fed_classifieds_nonce'], 'fed_classifieds_new_listing' ) ) {
+    if ( isset( $_POST['classyfeds_submit'] ) ) {
+        if ( ! isset( $_POST['classyfeds_nonce'] ) || ! wp_verify_nonce( $_POST['classyfeds_nonce'], 'classyfeds_new_listing' ) ) {
             $error = true;
         } else {
             $title   = isset( $_POST['listing_title'] ) ? sanitize_text_field( wp_unslash( $_POST['listing_title'] ) ) : '';
@@ -415,7 +415,7 @@ function fed_classifieds_form_shortcode() {
                     update_post_meta( $post_id, '_listing_type', $type );
                 }
 
-                $remote = get_option( 'fed_classifieds_remote_inbox' );
+                $remote = get_option( 'classyfeds_remote_inbox' );
                 if ( $remote ) {
                     $payload = [
                         '@context' => 'https://www.w3.org/ns/activitystreams',
@@ -447,40 +447,40 @@ function fed_classifieds_form_shortcode() {
         }
     }
 
-    wp_enqueue_style( 'fed-classifieds', plugin_dir_url( __FILE__ ) . 'assets/css/fed-classifieds.css', [], '0.1.0' );
+    wp_enqueue_style( 'classyfeds', plugin_dir_url( __FILE__ ) . 'assets/css/classyfeds.css', [], '0.1.0' );
 
     $cats = get_terms( [ 'taxonomy' => 'category', 'hide_empty' => false ] );
 
     ob_start();
 
     if ( $success ) {
-        echo '<p class="fed-classifieds-success">' . esc_html__( 'Listing submitted.', 'fed-classifieds' ) . '</p>';
+        echo '<p class="classyfeds-success">' . esc_html__( 'Listing submitted.', 'classyfeds' ) . '</p>';
     } elseif ( $error ) {
-        echo '<p class="fed-classifieds-error">' . esc_html__( 'Could not submit listing.', 'fed-classifieds' ) . '</p>';
+        echo '<p class="classyfeds-error">' . esc_html__( 'Could not submit listing.', 'classyfeds' ) . '</p>';
     }
 
-    echo '<form method="post" class="fed-classifieds-form">';
-    wp_nonce_field( 'fed_classifieds_new_listing', 'fed_classifieds_nonce' );
-    echo '<p><label for="listing_title">' . esc_html__( 'Title', 'fed-classifieds' ) . '</label><br />';
+    echo '<form method="post" class="classyfeds-form">';
+    wp_nonce_field( 'classyfeds_new_listing', 'classyfeds_nonce' );
+    echo '<p><label for="listing_title">' . esc_html__( 'Title', 'classyfeds' ) . '</label><br />';
     echo '<input type="text" id="listing_title" name="listing_title" required /></p>';
 
-    echo '<p><label for="listing_content">' . esc_html__( 'Description', 'fed-classifieds' ) . '</label><br />';
+    echo '<p><label for="listing_content">' . esc_html__( 'Description', 'classyfeds' ) . '</label><br />';
     echo '<textarea id="listing_content" name="listing_content" rows="5" required></textarea></p>';
 
-    echo '<p><label for="listing_type">' . esc_html__( 'Typ', 'fed-classifieds' ) . '</label><br />';
+    echo '<p><label for="listing_type">' . esc_html__( 'Typ', 'classyfeds' ) . '</label><br />';
     echo '<select id="listing_type" name="listing_type">';
-    echo '<option value="Angebot">' . esc_html__( 'Angebot', 'fed-classifieds' ) . '</option>';
-    echo '<option value="Gesuch">' . esc_html__( 'Gesuch', 'fed-classifieds' ) . '</option>';
+    echo '<option value="Angebot">' . esc_html__( 'Angebot', 'classyfeds' ) . '</option>';
+    echo '<option value="Gesuch">' . esc_html__( 'Gesuch', 'classyfeds' ) . '</option>';
     echo '</select></p>';
 
-    echo '<p><label for="listing_category">' . esc_html__( 'Category', 'fed-classifieds' ) . '</label><br />';
+    echo '<p><label for="listing_category">' . esc_html__( 'Category', 'classyfeds' ) . '</label><br />';
     echo '<select id="listing_category" name="listing_category">';
     foreach ( $cats as $cat ) {
         echo '<option value="' . esc_attr( $cat->term_id ) . '">' . esc_html( $cat->name ) . '</option>';
     }
     echo '</select></p>';
 
-    echo '<p><input type="submit" name="fed_classifieds_submit" value="' . esc_attr__( 'Submit', 'fed-classifieds' ) . '" /></p>';
+    echo '<p><input type="submit" name="classyfeds_submit" value="' . esc_attr__( 'Submit', 'classyfeds' ) . '" /></p>';
     echo '</form>';
 
     return ob_get_clean();

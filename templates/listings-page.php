@@ -2,12 +2,12 @@
 /**
  * Template for the Classifieds listings page.
  *
- * @package Fed_Classifieds
+ * @package Classyfeds
  */
 
 get_header(); ?>
 <div id="primary" class="content-area">
-    <main id="main" class="site-main fed-classifieds-listings">
+    <main id="main" class="site-main classyfeds-listings">
         <?php
         $query = new WP_Query([
             'post_type'      => [ 'listing', 'ap_object' ],
@@ -20,7 +20,7 @@ get_header(); ?>
                 $query->the_post();
                 $data = 'ap_object' === get_post_type() ? json_decode( get_the_content(), true ) : [];
                 ?>
-                <article id="post-<?php the_ID(); ?>" <?php post_class('fed-classifieds-listing'); ?>>
+                <article id="post-<?php the_ID(); ?>" <?php post_class('classyfeds-listing'); ?>>
                     <header class="entry-header">
                         <?php if ( 'listing' === get_post_type() ) : ?>
                             <h2 class="entry-title"><a href="<?php the_permalink(); ?>"><?php the_title(); ?></a></h2>
@@ -73,7 +73,7 @@ get_header(); ?>
             endwhile;
             wp_reset_postdata();
         else :
-            echo '<p>' . esc_html__( 'No listings found.', 'fed-classifieds' ) . '</p>';
+            echo '<p>' . esc_html__( 'No listings found.', 'classyfeds' ) . '</p>';
         endif;
         ?>
     </main>

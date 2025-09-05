@@ -2,12 +2,12 @@
 /**
  * Template for the standalone Classifieds aggregator page.
  *
- * @package Fed_Classifieds_Aggregator
+ * @package Classyfeds_Aggregator
  */
 
 get_header(); ?>
 <div id="primary" class="content-area">
-    <main id="main" class="site-main fed-classifieds-listings">
+    <main id="main" class="site-main classyfeds-listings">
         <?php
         $post_types = [ 'ap_object' ];
         if ( post_type_exists( 'listing' ) ) {
@@ -24,7 +24,7 @@ get_header(); ?>
             while ( $query->have_posts() ) :
                 $query->the_post();
                 ?>
-                <article id="post-<?php the_ID(); ?>" <?php post_class('fed-classifieds-listing'); ?>>
+                <article id="post-<?php the_ID(); ?>" <?php post_class('classyfeds-listing'); ?>>
                     <header class="entry-header">
                         <?php if ( 'listing' === get_post_type() ) : ?>
                             <h2 class="entry-title"><a href="<?php the_permalink(); ?>"><?php the_title(); ?></a></h2>
@@ -51,7 +51,7 @@ get_header(); ?>
             endwhile;
             wp_reset_postdata();
         else :
-            echo '<p>' . esc_html__( 'No listings found.', 'fed-classifieds-aggregator' ) . '</p>';
+            echo '<p>' . esc_html__( 'No listings found.', 'classyfeds-aggregator' ) . '</p>';
         endif;
         ?>
     </main>
