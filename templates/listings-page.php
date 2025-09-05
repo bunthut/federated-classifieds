@@ -10,7 +10,7 @@ get_header(); ?>
     <main id="main" class="site-main fed-classifieds-listings">
         <?php
         $query = new WP_Query([
-            'post_type'      => 'listing',
+            'post_type'      => [ 'listing', 'ap_object' ],
             'post_status'    => 'publish',
             'posts_per_page' => -1,
         ]);
@@ -21,15 +21,28 @@ get_header(); ?>
                 ?>
                 <article id="post-<?php the_ID(); ?>" <?php post_class('fed-classifieds-listing'); ?>>
                     <header class="entry-header">
-                        <h2 class="entry-title"><a href="<?php the_permalink(); ?>"><?php the_title(); ?></a></h2>
+                        <?php if ( 'listing' === get_post_type() ) : ?>
+                            <h2 class="entry-title"><a href="<?php the_permalink(); ?>"><?php the_title(); ?></a></h2>
+                        <?php else : ?>
+                            <h2 class="entry-title"><?php the_title(); ?></h2>
+                        <?php endif; ?>
                     </header>
                     <div class="entry-content">
                         <?php
-                        $type = get_post_meta( get_the_ID(), '_listing_type', true );
-                        if ( $type ) {
-                            echo '<p class="listing-type">' . esc_html( $type ) . '</p>';
+                        if ( 'listing' === get_post_type() ) {
+                            $type = get_post_meta( get_the_ID(), '_listing_type', true );
+                            if ( $type ) {
+                                echo '<p class="listing-type">' . esc_html( $type ) . '</p>';
+                            }
+                            the_excerpt();
+                        } else {
+                            $data = json_decode( get_the_content(), true );
+                            if ( isset( $data['content'] ) ) {
+                                echo wp_kses_post( wpautop( $data['content'] ) );
+                            } elseif ( isset( $data['summary'] ) ) {
+                                echo esc_html( $data['summary'] );
+                            }
                         }
-                        the_excerpt();
                         ?>
                     </div>
                 </article>
@@ -43,4 +56,4 @@ get_header(); ?>
     </main>
 </div>
 
-<?php get_footer();
+<?php get_footer(); ?>
