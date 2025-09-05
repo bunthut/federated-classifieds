@@ -199,6 +199,26 @@ function fed_classifieds_activate() {
         }
     }
 
+    // Register custom capability and assign to default roles.
+    add_role(
+        'listing_contributor',
+        __( 'Listing Contributor', 'fed-classifieds' ),
+        [
+            'read'             => true,
+            'publish_listings' => true,
+        ]
+    );
+
+    $default_roles = [ 'author', 'listing_contributor' ];
+    update_option( 'fed_classifieds_publish_roles', $default_roles );
+
+    foreach ( $default_roles as $role_name ) {
+        $role = get_role( $role_name );
+        if ( $role ) {
+            $role->add_cap( 'publish_listings' );
+        }
+    }
+
     // Flush rewrite rules to ensure custom routes are registered.
     flush_rewrite_rules();
 }
@@ -209,6 +229,73 @@ register_deactivation_hook( __FILE__, function() {
     wp_clear_scheduled_hook( 'fed_classifieds_expire_event' );
     flush_rewrite_rules();
 } );
+
+/**
+ * Add settings page under Options → Classifieds.
+ */
+add_action( 'admin_menu', function() {
+    add_options_page(
+        __( 'Classifieds', 'fed-classifieds' ),
+        __( 'Classifieds', 'fed-classifieds' ),
+        'manage_options',
+        'fed-classifieds',
+        'fed_classifieds_settings_page'
+    );
+} );
+
+/**
+ * Render settings page for selecting roles that may publish listings.
+ */
+function fed_classifieds_settings_page() {
+    if ( ! current_user_can( 'manage_options' ) ) {
+        return;
+    }
+
+    $editable_roles = get_editable_roles();
+    $selected       = (array) get_option( 'fed_classifieds_publish_roles', [] );
+    $message        = '';
+
+    if ( isset( $_POST['fed_classifieds_save'] ) && check_admin_referer( 'fed_classifieds_save_settings', 'fed_classifieds_nonce' ) ) {
+        $selected = isset( $_POST['publish_roles'] ) ? array_map( 'sanitize_text_field', (array) wp_unslash( $_POST['publish_roles'] ) ) : [];
+        update_option( 'fed_classifieds_publish_roles', $selected );
+
+        foreach ( $editable_roles as $role_key => $details ) {
+            $role = get_role( $role_key );
+            if ( ! $role ) {
+                continue;
+            }
+            if ( in_array( $role_key, $selected, true ) ) {
+                $role->add_cap( 'publish_listings' );
+            } else {
+                $role->remove_cap( 'publish_listings' );
+            }
+        }
+        $message = __( 'Settings saved.', 'fed-classifieds' );
+    }
+
+    echo '<div class="wrap">';
+    echo '<h1>' . esc_html__( 'Classifieds', 'fed-classifieds' ) . '</h1>';
+
+    if ( $message ) {
+        echo '<div class="updated"><p>' . esc_html( $message ) . '</p></div>';
+    }
+
+    echo '<form method="post">';
+    wp_nonce_field( 'fed_classifieds_save_settings', 'fed_classifieds_nonce' );
+
+    echo '<table class="form-table">';
+    echo '<tr><th scope="row">' . esc_html__( 'Roles that can publish listings', 'fed-classifieds' ) . '</th><td>';
+    foreach ( $editable_roles as $role_key => $details ) {
+        echo '<label><input type="checkbox" name="publish_roles[]" value="' . esc_attr( $role_key ) . '" ' . checked( in_array( $role_key, $selected, true ), true, false ) . ' /> ' . esc_html( $details['name'] ) . '</label><br />';
+    }
+    echo '</td></tr>';
+    echo '</table>';
+
+    submit_button( __( 'Save Changes', 'fed-classifieds' ), 'primary', 'fed_classifieds_save' );
+
+    echo '</form>';
+    echo '</div>';
+}
 
 add_action( 'fed_classifieds_expire_event', function() {
     $now   = current_time( 'timestamp' );
@@ -461,6 +548,14 @@ add_shortcode( 'fed_classifieds_form', 'fed_classifieds_form_shortcode' );
  * @return string Form HTML.
  */
 function fed_classifieds_form_shortcode() {
+    if ( ! is_user_logged_in() ) {
+        return '<p><a href="' . esc_url( wp_login_url( get_permalink() ) ) . '">' . esc_html__( 'Log in to submit a listing.', 'fed-classifieds' ) . '</a></p>';
+    }
+
+    if ( ! current_user_can( 'publish_listings' ) ) {
+        return '<p>' . esc_html__( 'You do not have permission to submit listings.', 'fed-classifieds' ) . '</p>';
+    }
+
     $success = false;
     $error   = false;
 
