@@ -1,6 +1,6 @@
 # Federated Classifieds
 
-A minimal WordPress plugin providing a `listing` custom post type, JSON-LD markup and automatic expiration for federated classified ads.
+A minimal WordPress plugin providing a `listing` custom post type, JSON-LD markup and automatic expiration for federated classified ads. A companion aggregator plugin is also included for setting up a standalone listings page.
 
 ## Features
 
@@ -11,13 +11,13 @@ A minimal WordPress plugin providing a `listing` custom post type, JSON-LD marku
 
 ## Build
 
-Run the build script to create a distributable plugin archive:
+Run the build script to create distributable plugin archives:
 
 ```bash
 ./build-zip.sh
 ```
 
-This produces `fed-classifieds.zip` containing `fed-classifieds.php` and supporting files.
+This produces `fed-classifieds.zip` containing `fed-classifieds.php` and `fed-classifieds-aggregator.zip` for the standalone aggregator.
 
 ## Installation
 
