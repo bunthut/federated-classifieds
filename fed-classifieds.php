@@ -117,4 +117,98 @@ add_action( 'fed_classifieds_expire_event', function() {
 /**
  * Output JSON-LD structured data for listings.
  */
-add_action( 'wp_head', function()
+add_action( 'wp_head', function() {
+    if ( ! is_singular( 'listing' ) ) {
+        return;
+    }
+
+    $post    = get_queried_object();
+    $price   = get_post_meta( $post->ID, '_price', true );
+    $expires = get_post_meta( $post->ID, '_expires_at', true );
+    $image   = get_the_post_thumbnail_url( $post->ID, 'full' );
+
+    $data = [
+        '@context' => 'https://schema.org/',
+        '@type'    => 'Offer',
+        'name'     => get_the_title( $post ),
+        'description' => wp_strip_all_tags( get_the_excerpt( $post ) ),
+        'url'      => get_permalink( $post ),
+    ];
+
+    if ( $image ) {
+        $data['image'] = $image;
+    }
+    if ( $price ) {
+        $data['price'] = $price;
+    }
+    if ( $expires ) {
+        $data['expires'] = gmdate( 'c', (int) $expires );
+    }
+
+    echo '<script type="application/ld+json">' . wp_json_encode( $data ) . '</script>' . "\n";
+} );
+
+/**
+ * Load template for the Classifieds page.
+ */
+add_filter( 'template_include', function( $template ) {
+    $page_id = (int) get_option( 'fed_classifieds_page_id' );
+    if ( $page_id && is_page( $page_id ) ) {
+        $new_template = plugin_dir_path( __FILE__ ) . 'templates/listings-page.php';
+        if ( file_exists( $new_template ) ) {
+            return $new_template;
+        }
+    }
+    return $template;
+} );
+
+/**
+ * Enqueue frontend assets for the Classifieds page.
+ */
+add_action( 'wp_enqueue_scripts', function() {
+    $page_id = (int) get_option( 'fed_classifieds_page_id' );
+    if ( $page_id && is_page( $page_id ) ) {
+        wp_enqueue_style( 'fed-classifieds', plugin_dir_url( __FILE__ ) . 'assets/css/fed-classifieds.css', [], '0.1.0' );
+        wp_enqueue_script( 'fed-classifieds', plugin_dir_url( __FILE__ ) . 'assets/js/fed-classifieds.js', [ 'jquery' ], '0.1.0', true );
+    }
+} );
+
+/**
+ * Register the Fed Classifieds admin dashboard.
+ */
+add_action( 'admin_menu', function() {
+    add_menu_page(
+        __( 'Fed Classifieds', 'fed-classifieds' ),
+        __( 'Fed Classifieds', 'fed-classifieds' ),
+        'manage_options',
+        'fed_classifieds_dashboard',
+        'fed_classifieds_render_dashboard',
+        'dashicons-list-view',
+        26
+    );
+} );
+
+/**
+ * Render the admin dashboard page.
+ */
+function fed_classifieds_render_dashboard() {
+    if ( ! current_user_can( 'manage_options' ) ) {
+        return;
+    }
+
+    $counts  = wp_count_posts( 'listing' );
+    $publish = isset( $counts->publish ) ? $counts->publish : 0;
+    $expired = isset( $counts->expired ) ? $counts->expired : 0;
+    ?>
+    <div class="wrap">
+        <h1><?php esc_html_e( 'Fed Classifieds', 'fed-classifieds' ); ?></h1>
+        <p><?php esc_html_e( 'Manage your classified listings. Listings automatically expire after 60 days.', 'fed-classifieds' ); ?></p>
+        <h2><?php esc_html_e( 'Statistics', 'fed-classifieds' ); ?></h2>
+        <ul>
+            <li><?php printf( esc_html__( 'Published listings: %s', 'fed-classifieds' ), number_format_i18n( $publish ) ); ?></li>
+            <li><?php printf( esc_html__( 'Expired listings: %s', 'fed-classifieds' ), number_format_i18n( $expired ) ); ?></li>
+        </ul>
+    </div>
+    <?php
+}
+
