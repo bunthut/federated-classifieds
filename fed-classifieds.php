@@ -246,7 +246,7 @@ add_action( 'wp_enqueue_scripts', function() {
 } );
 
 /**
- * Register ActivityPub inbox endpoint to accept federated objects.
+ * Register ActivityPub REST endpoints.
  */
 add_action( 'rest_api_init', function() {
     register_rest_route(
@@ -258,19 +258,36 @@ add_action( 'rest_api_init', function() {
             'permission_callback' => '__return_true',
         ]
     );
+
+    register_rest_route(
+        'fed-classifieds/v1',
+        '/listings',
+        [
+            'methods'             => WP_REST_Server::READABLE,
+            'callback'            => 'fed_classifieds_listings_handler',
+            'permission_callback' => '__return_true',
+        ]
+    );
 } );
 
 /**
  * Handle incoming ActivityPub objects and store them as "ap_object" posts.
  *
+ * Supports bare objects as well as "Create" activities wrapping an object.
+ *
  * @param WP_REST_Request $request Request object.
  * @return WP_REST_Response Response.
  */
 function fed_classifieds_inbox_handler( WP_REST_Request $request ) {
-    $object = $request->get_json_params();
+    $activity = $request->get_json_params();
 
-    if ( empty( $object ) || ! is_array( $object ) ) {
+    if ( empty( $activity ) || ! is_array( $activity ) ) {
         return new WP_REST_Response( [ 'error' => 'Invalid object' ], 400 );
+    }
+
+    $object = $activity;
+    if ( isset( $activity['type'] ) && 'Create' === $activity['type'] && ! empty( $activity['object'] ) ) {
+        $object = $activity['object'];
     }
 
     $title = '';
@@ -297,6 +314,57 @@ function fed_classifieds_inbox_handler( WP_REST_Request $request ) {
     }
 
     return new WP_REST_Response( [ 'stored' => $post_id ], 202 );
+}
+
+/**
+ * Expose listings as an ActivityStreams Collection.
+ *
+ * @param WP_REST_Request $request Request object.
+ * @return WP_REST_Response Response containing the collection.
+ */
+function fed_classifieds_listings_handler( WP_REST_Request $request ) {
+    $posts = get_posts(
+        [
+            'post_type'   => [ 'listing', 'ap_object' ],
+            'post_status' => 'publish',
+            'numberposts' => -1,
+        ]
+    );
+
+    $items = [];
+
+    foreach ( $posts as $post ) {
+        if ( 'listing' === $post->post_type ) {
+            $cats   = wp_get_post_terms( $post->ID, 'category', [ 'fields' => 'names' ] );
+            $object = [
+                'id'          => get_permalink( $post ),
+                'type'        => 'Note',
+                'name'        => get_the_title( $post ),
+                'content'     => wp_kses_post( $post->post_content ),
+                'url'         => get_permalink( $post ),
+                'published'   => get_post_time( 'c', true, $post ),
+                'attributedTo'=> home_url(),
+                'category'    => $cats,
+                'listingType' => get_post_meta( $post->ID, '_listing_type', true ),
+            ];
+            $items[] = $object;
+        } else {
+            $data = json_decode( $post->post_content, true );
+            if ( is_array( $data ) ) {
+                $items[] = $data;
+            }
+        }
+    }
+
+    $collection = [
+        '@context'     => 'https://www.w3.org/ns/activitystreams',
+        'id'           => home_url( '/wp-json/fed-classifieds/v1/listings' ),
+        'type'         => 'OrderedCollection',
+        'totalItems'   => count( $items ),
+        'orderedItems' => $items,
+    ];
+
+    return new WP_REST_Response( $collection );
 }
 
 /**
@@ -421,14 +489,25 @@ function fed_classifieds_form_shortcode() {
 
             $remote = get_option( 'fed_classifieds_remote_inbox', '' );
             if ( $remote ) {
-                $cat_name = $cat_id ? get_term_field( 'name', $cat_id, 'category' ) : '';
-                $payload  = [
-                    '@context'    => 'https://www.w3.org/ns/activitystreams',
+                $cat_name   = $cat_id ? get_term_field( 'name', $cat_id, 'category' ) : '';
+                $object_id  = get_permalink( $post_id );
+                $object     = [
+                    'id'          => $object_id,
                     'type'        => 'Note',
                     'name'        => $title,
                     'content'     => $content,
+                    'url'         => $object_id,
+                    'published'   => gmdate( 'c' ),
+                    'attributedTo'=> home_url(),
                     'category'    => $cat_name,
                     'listingType' => $type,
+                ];
+                $payload = [
+                    '@context' => 'https://www.w3.org/ns/activitystreams',
+                    'type'     => 'Create',
+                    'actor'    => home_url(),
+                    'to'       => [ $remote ],
+                    'object'   => $object,
                 ];
                 wp_remote_post( $remote, [
                     'headers' => [ 'Content-Type' => 'application/json' ],
