@@ -51,6 +51,7 @@ function fed_classifieds_aggregator_activate() {
             update_option( 'fed_classifieds_page_id', $page_id );
         }
     }
+    flush_rewrite_rules();
 }
 register_activation_hook( __FILE__, 'fed_classifieds_aggregator_activate' );
 
