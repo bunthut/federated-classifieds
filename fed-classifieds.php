@@ -183,12 +183,16 @@ function fed_classifieds_activate() {
     if ( ! wp_next_scheduled( 'fed_classifieds_expire_event' ) ) {
         wp_schedule_event( time(), 'daily', 'fed_classifieds_expire_event' );
     }
+
+    // Flush rewrite rules to ensure custom routes are registered.
+    flush_rewrite_rules();
 }
 
 register_activation_hook( __FILE__, 'fed_classifieds_activate' );
 
 register_deactivation_hook( __FILE__, function() {
     wp_clear_scheduled_hook( 'fed_classifieds_expire_event' );
+    flush_rewrite_rules();
 } );
 
 add_action( 'fed_classifieds_expire_event', function() {
