@@ -317,48 +317,53 @@ function fed_classifieds_inbox_handler( WP_REST_Request $request ) {
 }
 
 /**
- * Expose listings as an ActivityStreams Collection.
+/**
+ * Retrieve listings and ActivityPub objects as an ActivityStreams collection.
  *
  * @param WP_REST_Request $request Request object.
- * @return WP_REST_Response Response containing the collection.
+ * @return WP_REST_Response Response.
  */
 function fed_classifieds_listings_handler( WP_REST_Request $request ) {
-    $posts = get_posts(
+    $query = new WP_Query(
         [
-            'post_type'   => [ 'listing', 'ap_object' ],
-            'post_status' => 'publish',
-            'numberposts' => -1,
+            'post_type'      => [ 'listing', 'ap_object' ],
+            'post_status'    => 'publish',
+            'posts_per_page' => -1,
         ]
     );
 
     $items = [];
 
-    foreach ( $posts as $post ) {
-        if ( 'listing' === $post->post_type ) {
-            $cats   = wp_get_post_terms( $post->ID, 'category', [ 'fields' => 'names' ] );
-            $object = [
-                'id'          => get_permalink( $post ),
-                'type'        => 'Note',
-                'name'        => get_the_title( $post ),
-                'content'     => wp_kses_post( $post->post_content ),
-                'url'         => get_permalink( $post ),
-                'published'   => get_post_time( 'c', true, $post ),
-                'attributedTo'=> home_url(),
-                'category'    => $cats,
-                'listingType' => get_post_meta( $post->ID, '_listing_type', true ),
-            ];
-            $items[] = $object;
-        } else {
+    foreach ( $query->posts as $post ) {
+        if ( 'ap_object' === $post->post_type ) {
             $data = json_decode( $post->post_content, true );
             if ( is_array( $data ) ) {
+                if ( empty( $data['@context'] ) ) {
+                    $data['@context'] = 'https://www.w3.org/ns/activitystreams';
+                }
                 $items[] = $data;
+                continue;
             }
         }
+
+        $cats = wp_get_post_terms( $post->ID, 'category', [ 'fields' => 'names' ] );
+        $items[] = [
+            '@context'     => 'https://www.w3.org/ns/activitystreams',
+            'id'           => get_permalink( $post ),
+            'type'         => 'Note',
+            'name'         => get_the_title( $post ),
+            'content'      => apply_filters( 'the_content', $post->post_content ),
+            'url'          => get_permalink( $post ),
+            'published'    => mysql2date( 'c', $post->post_date_gmt, false ),
+            'attributedTo' => home_url(),
+            'category'     => $cats,
+            'listingType'  => get_post_meta( $post->ID, '_listing_type', true ),
+        ];
     }
 
     $collection = [
         '@context'     => 'https://www.w3.org/ns/activitystreams',
-        'id'           => home_url( '/wp-json/fed-classifieds/v1/listings' ),
+        'id'           => rest_url( 'fed-classifieds/v1/listings' ),
         'type'         => 'OrderedCollection',
         'totalItems'   => count( $items ),
         'orderedItems' => $items,
@@ -367,150 +372,8 @@ function fed_classifieds_listings_handler( WP_REST_Request $request ) {
     return new WP_REST_Response( $collection );
 }
 
-/**
- * Register the Fed Classifieds admin dashboard.
- */
-add_action( 'admin_menu', function() {
-    add_menu_page(
-        __( 'Fed Classifieds', 'fed-classifieds' ),
-        __( 'Fed Classifieds', 'fed-classifieds' ),
-        'manage_options',
-        'fed_classifieds_dashboard',
-        'fed_classifieds_render_dashboard',
-        'dashicons-list-view',
-        26
-    );
-} );
-
-/**
- * Render the admin dashboard page.
- */
-function fed_classifieds_render_dashboard() {
-    if ( ! current_user_can( 'manage_options' ) ) {
-        return;
-    }
-
-    $counts  = wp_count_posts( 'listing' );
-    $publish = isset( $counts->publish ) ? $counts->publish : 0;
-    $expired = isset( $counts->expired ) ? $counts->expired : 0;
-    ?>
-    <div class="wrap">
-        <h1><?php esc_html_e( 'Fed Classifieds', 'fed-classifieds' ); ?></h1>
-        <p><?php esc_html_e( 'Manage your classified listings. Listings automatically expire after 60 days.', 'fed-classifieds' ); ?></p>
-        <h2><?php esc_html_e( 'Statistics', 'fed-classifieds' ); ?></h2>
-        <ul>
-            <li><?php printf( esc_html__( 'Published listings: %s', 'fed-classifieds' ), number_format_i18n( $publish ) ); ?></li>
-            <li><?php printf( esc_html__( 'Expired listings: %s', 'fed-classifieds' ), number_format_i18n( $expired ) ); ?></li>
-        </ul>
-    </div>
-    <?php
-}
-
-/**
- * Settings page for configuring remote ActivityPub inbox.
- */
-add_action( 'admin_menu', function() {
-    add_options_page(
-        __( 'Classifieds Settings', 'fed-classifieds' ),
-        __( 'Classifieds', 'fed-classifieds' ),
-        'manage_options',
-        'fed-classifieds-settings',
-        'fed_classifieds_settings_page'
-    );
-} );
-
-/**
- * Render the settings page.
- */
-function fed_classifieds_settings_page() {
-    if ( ! current_user_can( 'manage_options' ) ) {
-        return;
-    }
-
-    $message = '';
-
-    if ( isset( $_POST['fed_classifieds_settings_save'] ) && check_admin_referer( 'fed_classifieds_settings', 'fed_classifieds_settings_nonce' ) ) {
-        $url = isset( $_POST['fed_classifieds_remote_inbox'] ) ? esc_url_raw( wp_unslash( $_POST['fed_classifieds_remote_inbox'] ) ) : '';
-        update_option( 'fed_classifieds_remote_inbox', $url );
-        $message = __( 'Settings saved.', 'fed-classifieds' );
-    }
-
-    $current = get_option( 'fed_classifieds_remote_inbox', '' );
-
-    echo '<div class="wrap">';
-    echo '<h1>' . esc_html__( 'Classifieds Settings', 'fed-classifieds' ) . '</h1>';
-
-    if ( $message ) {
-        echo '<div class="updated"><p>' . esc_html( $message ) . '</p></div>';
-    }
-
-    echo '<form method="post">';
-    wp_nonce_field( 'fed_classifieds_settings', 'fed_classifieds_settings_nonce' );
-    echo '<table class="form-table">';
-    echo '<tr><th scope="row">' . esc_html__( 'Remote inbox URL', 'fed-classifieds' ) . '</th><td><input type="url" name="fed_classifieds_remote_inbox" value="' . esc_attr( $current ) . '" class="regular-text" /></td></tr>';
-    echo '</table>';
-    submit_button( __( 'Save Changes', 'fed-classifieds' ), 'primary', 'fed_classifieds_settings_save' );
-    echo '</form>';
-    echo '</div>';
-}
-
-/**
- * Shortcode for frontend listing submission form.
- */
-add_shortcode( 'fed_classifieds_form', 'fed_classifieds_form_shortcode' );
-
-/**
- * Render and process the listing submission form.
- *
- * @return string
- */
-function fed_classifieds_form_shortcode() {
-    $success = false;
-    $error   = false;
-
-    if ( isset( $_POST['fed_classifieds_submit'] ) && isset( $_POST['fed_classifieds_nonce'] ) && wp_verify_nonce( $_POST['fed_classifieds_nonce'], 'fed_classifieds_new_listing' ) ) {
-        $title   = isset( $_POST['listing_title'] ) ? sanitize_text_field( wp_unslash( $_POST['listing_title'] ) ) : '';
-        $content = isset( $_POST['listing_content'] ) ? wp_kses_post( wp_unslash( $_POST['listing_content'] ) ) : '';
-        $type    = isset( $_POST['listing_type'] ) ? sanitize_text_field( wp_unslash( $_POST['listing_type'] ) ) : '';
-        $cat_id  = isset( $_POST['listing_category'] ) ? (int) $_POST['listing_category'] : 0;
-
-        $post_id = wp_insert_post( [
-            'post_type'   => 'listing',
-            'post_status' => 'publish',
-            'post_title'  => $title,
-            'post_content'=> $content,
-            'tax_input'   => [ 'category' => [ $cat_id ] ],
-        ], true );
-
-        if ( ! is_wp_error( $post_id ) ) {
-            if ( $type ) {
-                update_post_meta( $post_id, '_listing_type', $type );
-            }
-
-            $remote = get_option( 'fed_classifieds_remote_inbox', '' );
-            if ( $remote ) {
-                $cat_name   = $cat_id ? get_term_field( 'name', $cat_id, 'category' ) : '';
-                $object_id  = get_permalink( $post_id );
-                $object     = [
-                    'id'          => $object_id,
-                    'type'        => 'Note',
-                    'name'        => $title,
-                    'content'     => $content,
-                    'url'         => $object_id,
-                    'published'   => gmdate( 'c' ),
-                    'attributedTo'=> home_url(),
-                    'category'    => $cat_name,
-                    'listingType' => $type,
-                ];
-                $payload = [
-                    '@context' => 'https://www.w3.org/ns/activitystreams',
-                    'type'     => 'Create',
-                    'actor'    => home_url(),
-                    'to'       => [ $remote ],
-                    'object'   => $object,
-                ];
                 wp_remote_post( $remote, [
-                    'headers' => [ 'Content-Type' => 'application/json' ],
+                    'headers' => [ 'Content-Type' => 'application/activity+json' ],
                     'body'    => wp_json_encode( $payload ),
                     'timeout' => 15,
                 ] );
