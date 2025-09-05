@@ -12,6 +12,7 @@ A minimal WordPress plugin providing a `listing` custom post type, JSON-LD marku
 - On activation some default categories common to classifieds sites are created for convenience.
 - Exposes `/wp-json/fed-classifieds/v1/inbox` (POST) for incoming ActivityPub objects and `/wp-json/fed-classifieds/v1/listings` (GET) to retrieve them together with local listings.
 - Creates a "Classifieds" page on activation and stores its ID in the `fed_classifieds_page_id` option.
+- Registers a `publish_listings` capability and settings page to choose which roles can submit listings.
 
 ## Build
 
@@ -36,3 +37,7 @@ Alternatively, copy `fed-classifieds.php` to `wp-content/plugins/fed-classifieds
 On activation the plugin creates a **Classifieds** page. Its ID is stored in the `fed_classifieds_page_id` option and can be changed to use an existing page.
 
 The page uses a bundled template that lists local `listing` posts along with any ActivityPub objects that were `POST`ed to `/wp-json/fed-classifieds/v1/inbox`. All listings and received objects are also exposed as an ActivityStreams collection via `GET /wp-json/fed-classifieds/v1/listings`.
+
+## Capabilities
+
+On activation the plugin creates a `publish_listings` capability and grants it to the built-in Author role as well as a new "Listing Contributor" role. Only users with this capability can submit listings via the `[fed_classifieds_form]` shortcode. Administrators may assign or revoke this capability for other roles under **Settings → Classifieds**.
