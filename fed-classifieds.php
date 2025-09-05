@@ -28,6 +28,26 @@ add_action( 'init', function() {
 } );
 
 /**
+ * Register a custom post type for storing incoming ActivityPub objects.
+ *
+ * These objects are used to represent remote listings that arrive through
+ * the federated inbox endpoint. The posts are not public but can be queried
+ * so they may appear alongside local listings on the listings page template.
+ */
+add_action( 'init', function() {
+    register_post_type( 'ap_object', [
+        'labels' => [
+            'name'          => __( 'ActivityPub Objects', 'fed-classifieds' ),
+            'singular_name' => __( 'ActivityPub Object', 'fed-classifieds' ),
+        ],
+        'public'       => false,
+        'show_ui'      => false,
+        'show_in_rest' => false,
+        'supports'     => [ 'title', 'editor' ],
+    ] );
+} );
+
+/**
  * Register custom post status "expired".
  */
 add_action( 'init', function() {
@@ -172,6 +192,60 @@ add_action( 'wp_enqueue_scripts', function() {
         wp_enqueue_script( 'fed-classifieds', plugin_dir_url( __FILE__ ) . 'assets/js/fed-classifieds.js', [ 'jquery' ], '0.1.0', true );
     }
 } );
+
+/**
+ * Register ActivityPub inbox endpoint to accept federated objects.
+ */
+add_action( 'rest_api_init', function() {
+    register_rest_route(
+        'fed-classifieds/v1',
+        '/inbox',
+        [
+            'methods'             => WP_REST_Server::CREATABLE,
+            'callback'            => 'fed_classifieds_inbox_handler',
+            'permission_callback' => '__return_true',
+        ]
+    );
+} );
+
+/**
+ * Handle incoming ActivityPub objects and store them as "ap_object" posts.
+ *
+ * @param WP_REST_Request $request Request object.
+ * @return WP_REST_Response Response.
+ */
+function fed_classifieds_inbox_handler( WP_REST_Request $request ) {
+    $object = $request->get_json_params();
+
+    if ( empty( $object ) || ! is_array( $object ) ) {
+        return new WP_REST_Response( [ 'error' => 'Invalid object' ], 400 );
+    }
+
+    $title = '';
+    if ( isset( $object['name'] ) ) {
+        $title = sanitize_text_field( $object['name'] );
+    } elseif ( isset( $object['summary'] ) ) {
+        $title = sanitize_text_field( $object['summary'] );
+    } else {
+        $title = __( 'Remote ActivityPub Object', 'fed-classifieds' );
+    }
+
+    $post_id = wp_insert_post(
+        [
+            'post_type'   => 'ap_object',
+            'post_status' => 'publish',
+            'post_title'  => $title,
+            'post_content'=> wp_json_encode( $object ),
+        ],
+        true
+    );
+
+    if ( is_wp_error( $post_id ) ) {
+        return new WP_REST_Response( [ 'error' => 'Could not store object' ], 500 );
+    }
+
+    return new WP_REST_Response( [ 'stored' => $post_id ], 202 );
+}
 
 /**
  * Register the Fed Classifieds admin dashboard.
