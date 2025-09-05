@@ -142,19 +142,35 @@ function fed_classifieds_activate() {
         wp_schedule_event( time(), 'daily', 'fed_classifieds_expire_event' );
     }
 
-    // Insert some default categories similar to popular classifieds sites.
+    // Insert default categories and optional subcategories similar to popular classifieds sites.
     $default_categories = [
-        'Auto & Motorrad',
-        'Immobilien',
-        'Jobs',
-        'Elektronik',
-        'Haushalt',
-        'Mode & Beauty',
-        'Freizeit & Sport',
+        'Auto, Rad & Boot'              => [ 'Autos', 'Motorräder', 'Boote', 'Fahrräder' ],
+        'Elektronik'                    => [ 'Computer', 'Handys & Telefone', 'TV, Video & Audio' ],
+        'Haus & Garten'                 => [ 'Möbel & Wohnen', 'Haushaltsgeräte', 'Heimwerker & Bau' ],
+        'Mode & Beauty'                 => [],
+        'Freizeit, Hobby & Nachbarschaft' => [],
+        'Familie, Kind & Baby'          => [],
+        'Dienstleistungen'              => [],
+        'Jobs'                          => [],
+        'Immobilien'                    => [],
     ];
-    foreach ( $default_categories as $cat ) {
-        if ( ! term_exists( $cat, 'category' ) ) {
-            wp_insert_term( $cat, 'category' );
+    foreach ( $default_categories as $parent => $children ) {
+        $existing  = term_exists( $parent, 'category' );
+        $parent_id = 0;
+
+        if ( $existing ) {
+            $parent_id = is_array( $existing ) ? $existing['term_id'] : $existing;
+        } else {
+            $term      = wp_insert_term( $parent, 'category' );
+            $parent_id = is_wp_error( $term ) ? 0 : $term['term_id'];
+        }
+
+        if ( $parent_id && ! empty( $children ) ) {
+            foreach ( $children as $child ) {
+                if ( ! term_exists( $child, 'category' ) ) {
+                    wp_insert_term( $child, 'category', [ 'parent' => $parent_id ] );
+                }
+            }
         }
     }
 
