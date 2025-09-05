@@ -10,7 +10,7 @@ get_header(); ?>
     <main id="main" class="site-main fed-classifieds-listings">
         <?php
         $query = new WP_Query([
-            'post_type'      => 'listing',
+            'post_type'      => [ 'listing', 'external_listing' ],
             'post_status'    => 'publish',
             'posts_per_page' => -1,
         ]);
@@ -18,10 +18,11 @@ get_header(); ?>
         if ( $query->have_posts() ) :
             while ( $query->have_posts() ) :
                 $query->the_post();
+                $link = 'external_listing' === get_post_type() ? get_post_meta( get_the_ID(), '_external_url', true ) : get_permalink();
                 ?>
                 <article id="post-<?php the_ID(); ?>" <?php post_class('fed-classifieds-listing'); ?>>
                     <header class="entry-header">
-                        <h2 class="entry-title"><a href="<?php the_permalink(); ?>"><?php the_title(); ?></a></h2>
+                        <h2 class="entry-title"><a href="<?php echo esc_url( $link ); ?>"<?php if ( 'external_listing' === get_post_type() ) echo ' target="_blank" rel="nofollow noopener"'; ?>><?php the_title(); ?></a></h2>
                     </header>
                     <div class="entry-content">
                         <?php the_excerpt(); ?>

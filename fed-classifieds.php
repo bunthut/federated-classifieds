@@ -28,6 +28,23 @@ add_action( 'init', function() {
 } );
 
 /**
+ * Register the "external_listing" custom post type for remote listings.
+ */
+add_action( 'init', function() {
+    register_post_type( 'external_listing', [
+        'labels' => [
+            'name'          => __( 'External Listings', 'fed-classifieds' ),
+            'singular_name' => __( 'External Listing', 'fed-classifieds' ),
+        ],
+        'public'       => true,
+        'has_archive'  => false,
+        'show_in_rest' => true,
+        'supports'     => [ 'title', 'editor', 'thumbnail' ],
+        'rewrite'      => [ 'slug' => 'external-listings' ],
+    ] );
+} );
+
+/**
  * Register custom post status "expired".
  */
 add_action( 'init', function() {
@@ -40,6 +57,29 @@ add_action( 'init', function() {
         'show_in_admin_status_list' => true,
         'label_count'               => _n_noop( 'Expired <span class="count">(%s)</span>', 'Expired <span class="count">(%s)</span>', 'fed-classifieds' ),
     ] );
+} );
+
+/**
+ * Add a meta box for external listing URLs and save the value.
+ */
+add_action( 'add_meta_boxes', function() {
+    add_meta_box(
+        'external_listing_url',
+        __( 'External URL', 'fed-classifieds' ),
+        function( $post ) {
+            $url = get_post_meta( $post->ID, '_external_url', true );
+            wp_nonce_field( 'external_listing_url_nonce', 'external_listing_url_nonce' );
+            echo '<input type="url" style="width:100%" name="external_listing_url" value="' . esc_attr( $url ) . '" />';
+        },
+        'external_listing'
+    );
+} );
+
+add_action( 'save_post_external_listing', function( $post_id ) {
+    if ( isset( $_POST['external_listing_url_nonce'] ) && wp_verify_nonce( $_POST['external_listing_url_nonce'], 'external_listing_url_nonce' ) ) {
+        $url = isset( $_POST['external_listing_url'] ) ? esc_url_raw( $_POST['external_listing_url'] ) : '';
+        update_post_meta( $post_id, '_external_url', $url );
+    }
 } );
 
 /**
