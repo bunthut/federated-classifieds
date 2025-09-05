@@ -58,13 +58,40 @@ add_action( 'save_post_listing', function( $post_id, $post, $update ) {
 }, 10, 3 );
 
 /**
- * Schedule a daily cron event to expire listings.
+ * Handle plugin activation tasks.
+ *
+ * Creates the "Classifieds" page if it does not exist and schedules the
+ * daily expiration event.
  */
-register_activation_hook( __FILE__, function() {
+function fed_classifieds_activate() {
+    $page_id = (int) get_option( 'fed_classifieds_page_id' );
+
+    if ( $page_id && get_post( $page_id ) ) {
+        // Page already exists and is stored in options.
+    } else {
+        $page    = get_page_by_path( 'classifieds' );
+        $page_id = $page ? $page->ID : 0;
+
+        if ( ! $page_id ) {
+            $page_id = wp_insert_post( [
+                'post_title'  => __( 'Classifieds', 'fed-classifieds' ),
+                'post_name'   => 'classifieds',
+                'post_status' => 'publish',
+                'post_type'   => 'page',
+            ] );
+        }
+
+        if ( $page_id ) {
+            update_option( 'fed_classifieds_page_id', $page_id );
+        }
+    }
+
     if ( ! wp_next_scheduled( 'fed_classifieds_expire_event' ) ) {
         wp_schedule_event( time(), 'daily', 'fed_classifieds_expire_event' );
     }
-} );
+}
+
+register_activation_hook( __FILE__, 'fed_classifieds_activate' );
 
 register_deactivation_hook( __FILE__, function() {
     wp_clear_scheduled_hook( 'fed_classifieds_expire_event' );
@@ -119,5 +146,30 @@ add_action( 'wp_head', function() {
     }
 
     echo '<script type="application/ld+json">' . wp_json_encode( $data ) . '</script>' . "\n";
+} );
+
+/**
+ * Load template for the Classifieds page.
+ */
+add_filter( 'template_include', function( $template ) {
+    $page_id = (int) get_option( 'fed_classifieds_page_id' );
+    if ( $page_id && is_page( $page_id ) ) {
+        $new_template = plugin_dir_path( __FILE__ ) . 'templates/listings-page.php';
+        if ( file_exists( $new_template ) ) {
+            return $new_template;
+        }
+    }
+    return $template;
+} );
+
+/**
+ * Enqueue frontend assets for the Classifieds page.
+ */
+add_action( 'wp_enqueue_scripts', function() {
+    $page_id = (int) get_option( 'fed_classifieds_page_id' );
+    if ( $page_id && is_page( $page_id ) ) {
+        wp_enqueue_style( 'fed-classifieds', plugin_dir_url( __FILE__ ) . 'assets/css/fed-classifieds.css', [], '0.1.0' );
+        wp_enqueue_script( 'fed-classifieds', plugin_dir_url( __FILE__ ) . 'assets/js/fed-classifieds.js', [ 'jquery' ], '0.1.0', true );
+    }
 } );
 
