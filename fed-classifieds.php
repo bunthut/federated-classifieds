@@ -121,3 +121,43 @@ add_action( 'wp_head', function() {
     echo '<script type="application/ld+json">' . wp_json_encode( $data ) . '</script>' . "\n";
 } );
 
+/**
+ * Register the Fed Classifieds admin dashboard.
+ */
+add_action( 'admin_menu', function() {
+    add_menu_page(
+        __( 'Fed Classifieds', 'fed-classifieds' ),
+        __( 'Fed Classifieds', 'fed-classifieds' ),
+        'manage_options',
+        'fed_classifieds_dashboard',
+        'fed_classifieds_render_dashboard',
+        'dashicons-list-view',
+        26
+    );
+} );
+
+/**
+ * Render the admin dashboard page.
+ */
+function fed_classifieds_render_dashboard() {
+    if ( ! current_user_can( 'manage_options' ) ) {
+        return;
+    }
+
+    $counts  = wp_count_posts( 'listing' );
+    $publish = isset( $counts->publish ) ? $counts->publish : 0;
+    $expired = isset( $counts->expired ) ? $counts->expired : 0;
+
+    ?>
+    <div class="wrap">
+        <h1><?php esc_html_e( 'Fed Classifieds', 'fed-classifieds' ); ?></h1>
+        <p><?php esc_html_e( 'Manage your classified listings. Listings automatically expire after 60 days.', 'fed-classifieds' ); ?></p>
+        <h2><?php esc_html_e( 'Statistics', 'fed-classifieds' ); ?></h2>
+        <ul>
+            <li><?php printf( esc_html__( 'Published listings: %s', 'fed-classifieds' ), number_format_i18n( $publish ) ); ?></li>
+            <li><?php printf( esc_html__( 'Expired listings: %s', 'fed-classifieds' ), number_format_i18n( $expired ) ); ?></li>
+        </ul>
+    </div>
+    <?php
+}
+
