@@ -379,17 +379,48 @@ function fed_classifieds_listings_handler( WP_REST_Request $request ) {
         if ( 'ap_object' === $post->post_type ) {
             $data = json_decode( $post->post_content, true );
             if ( is_array( $data ) ) {
-                if ( empty( $data['@context'] ) ) {
-                    $data['@context'] = 'https://www.w3.org/ns/activitystreams';
+                // Force context to include required metadata definitions.
+                $data['@context'] = [
+                    'https://www.w3.org/ns/activitystreams',
+                    [
+                        'price'    => 'https://schema.org/price',
+                        'location' => 'https://schema.org/location',
+                        'category' => 'https://schema.org/category',
+                    ],
+                ];
+
+                // Ensure visibility fields are present.
+                $data['to'] = $data['to'] ?? 'https://www.w3.org/ns/activitystreams#Public';
+                $data['cc'] = $data['cc'] ?? 'https://www.w3.org/ns/activitystreams#Public';
+
+                // Skip objects missing mandatory metadata.
+                if ( empty( $data['price'] ) || empty( $data['location'] ) || empty( $data['category'] ) ) {
+                    continue;
                 }
+
                 $items[] = $data;
                 continue;
             }
         }
 
-        $cats = wp_get_post_terms( $post->ID, 'category', [ 'fields' => 'names' ] );
+        $cats     = wp_get_post_terms( $post->ID, 'category', [ 'fields' => 'names' ] );
+        $price    = get_post_meta( $post->ID, '_price', true );
+        $location = get_post_meta( $post->ID, '_location', true );
+
+        // Skip listings missing required metadata.
+        if ( empty( $price ) || empty( $location ) || empty( $cats ) ) {
+            continue;
+        }
+
         $items[] = [
-            '@context'     => 'https://www.w3.org/ns/activitystreams',
+            '@context'     => [
+                'https://www.w3.org/ns/activitystreams',
+                [
+                    'price'    => 'https://schema.org/price',
+                    'location' => 'https://schema.org/location',
+                    'category' => 'https://schema.org/category',
+                ],
+            ],
             'id'           => get_permalink( $post ),
             'type'         => 'Note',
             'name'         => get_the_title( $post ),
@@ -397,6 +428,10 @@ function fed_classifieds_listings_handler( WP_REST_Request $request ) {
             'url'          => get_permalink( $post ),
             'published'    => mysql2date( 'c', $post->post_date_gmt, false ),
             'attributedTo' => home_url(),
+            'to'           => 'https://www.w3.org/ns/activitystreams#Public',
+            'cc'           => 'https://www.w3.org/ns/activitystreams#Public',
+            'price'        => $price,
+            'location'     => $location,
             'category'     => $cats,
             'listingType'  => get_post_meta( $post->ID, '_listing_type', true ),
         ];
