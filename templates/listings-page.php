@@ -58,7 +58,7 @@ get_header(); ?>
                     </div>
                     <footer class="entry-footer">
                         <?php
-                        $categories = get_the_term_list( get_the_ID(), 'category', '<span class="cat-links">', ', ', '</span>' );
+                        $categories = get_the_term_list( get_the_ID(), 'listing_category', '<span class="cat-links">', ', ', '</span>' );
                         if ( $categories ) {
                             echo $categories; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
                         }

@@ -23,9 +23,23 @@ add_action( 'init', function() {
         'has_archive'  => true,
         'show_in_rest' => true,
         'supports'     => [ 'title', 'editor', 'thumbnail' ],
-        'taxonomies'   => [ 'category', 'post_tag' ],
+        'taxonomies'   => [ 'listing_category', 'post_tag' ],
         'rewrite'      => [ 'slug' => 'listings' ],
     ] );
+
+    register_taxonomy(
+        'listing_category',
+        'listing',
+        [
+            'labels'       => [
+                'name'          => __( 'Listing Categories', 'classyfeds' ),
+                'singular_name' => __( 'Listing Category', 'classyfeds' ),
+            ],
+            'public'       => true,
+            'show_in_rest' => true,
+            'hierarchical' => true,
+        ]
+    );
 } );
 
 
@@ -155,20 +169,20 @@ function classyfeds_activate() {
         'Immobilien'                    => [],
     ];
     foreach ( $default_categories as $parent => $children ) {
-        $existing  = term_exists( $parent, 'category' );
+        $existing  = term_exists( $parent, 'listing_category' );
         $parent_id = 0;
 
         if ( $existing ) {
             $parent_id = is_array( $existing ) ? $existing['term_id'] : $existing;
         } else {
-            $term      = wp_insert_term( $parent, 'category' );
+            $term      = wp_insert_term( $parent, 'listing_category' );
             $parent_id = is_wp_error( $term ) ? 0 : $term['term_id'];
         }
 
         if ( $parent_id && ! empty( $children ) ) {
             foreach ( $children as $child ) {
-                if ( ! term_exists( $child, 'category' ) ) {
-                    wp_insert_term( $child, 'category', [ 'parent' => $parent_id ] );
+                if ( ! term_exists( $child, 'listing_category' ) ) {
+                    wp_insert_term( $child, 'listing_category', [ 'parent' => $parent_id ] );
                 }
             }
         }
@@ -230,9 +244,6 @@ register_deactivation_hook( __FILE__, function() {
     flush_rewrite_rules();
 } );
 
-<<<<<<< HEAD:classyfeds.php
-add_action( 'classyfeds_expire_event', function() {
-=======
 /**
  * Add settings page under Options → Classifieds.
  */
@@ -300,8 +311,7 @@ function fed_classifieds_settings_page() {
     echo '</div>';
 }
 
-add_action( 'fed_classifieds_expire_event', function() {
->>>>>>> main:fed-classifieds.php
+add_action( 'classyfeds_expire_event', function() {
     $now   = current_time( 'timestamp' );
     $posts = get_posts( [
         'post_type'   => 'listing',
@@ -494,7 +504,7 @@ function classyfeds_listings_handler( WP_REST_Request $request ) {
             }
         }
 
-        $cats     = wp_get_post_terms( $post->ID, 'category', [ 'fields' => 'names' ] );
+        $cats     = wp_get_post_terms( $post->ID, 'listing_category', [ 'fields' => 'names' ] );
         $price    = get_post_meta( $post->ID, '_price', true );
         $location = get_post_meta( $post->ID, '_location', true );
 
@@ -551,19 +561,14 @@ add_shortcode( 'classyfeds_form', 'classyfeds_form_shortcode' );
  *
  * @return string Form HTML.
  */
-<<<<<<< HEAD:classyfeds.php
 function classyfeds_form_shortcode() {
-=======
-function fed_classifieds_form_shortcode() {
     if ( ! is_user_logged_in() ) {
-        return '<p><a href="' . esc_url( wp_login_url( get_permalink() ) ) . '">' . esc_html__( 'Log in to submit a listing.', 'fed-classifieds' ) . '</a></p>';
+        return '<p><a href="' . esc_url( wp_login_url( get_permalink() ) ) . '">' . esc_html__( 'Log in to submit a listing.', 'classyfeds' ) . '</a></p>';
     }
 
     if ( ! current_user_can( 'publish_listings' ) ) {
-        return '<p>' . esc_html__( 'You do not have permission to submit listings.', 'fed-classifieds' ) . '</p>';
+        return '<p>' . esc_html__( 'You do not have permission to submit listings.', 'classyfeds' ) . '</p>';
     }
-
->>>>>>> main:fed-classifieds.php
     $success = false;
     $error   = false;
 
@@ -578,55 +583,7 @@ function fed_classifieds_form_shortcode() {
             $price    = isset( $_POST['listing_price'] ) ? sanitize_text_field( wp_unslash( $_POST['listing_price'] ) ) : '';
             $location = isset( $_POST['listing_location'] ) ? sanitize_text_field( wp_unslash( $_POST['listing_location'] ) ) : '';
 
-<<<<<<< HEAD:classyfeds.php
-            $post_id = wp_insert_post(
-                [
-                    'post_type'   => 'listing',
-                    'post_status' => 'publish',
-                    'post_title'  => $title,
-                    'post_content'=> $content,
-                ],
-                true
-            );
-
-            if ( ! is_wp_error( $post_id ) ) {
-                if ( $cat ) {
-                    wp_set_post_terms( $post_id, [ $cat ], 'category' );
-                }
-                if ( $type ) {
-                    update_post_meta( $post_id, '_listing_type', $type );
-                }
-
-                $remote = get_option( 'classyfeds_remote_inbox' );
-                if ( $remote ) {
-                    $payload = [
-                        '@context' => 'https://www.w3.org/ns/activitystreams',
-                        'type'     => 'Create',
-                        'actor'    => home_url(),
-                        'object'   => [
-                            'type'        => 'Note',
-                            'name'        => $title,
-                            'content'     => $content,
-                            'url'         => get_permalink( $post_id ),
-                            'category'    => array_values( wp_get_post_terms( $post_id, 'category', [ 'fields' => 'names' ] ) ),
-                            'listingType' => $type,
-                        ],
-                    ];
-                    wp_remote_post(
-                        $remote,
-                        [
-                            'headers' => [ 'Content-Type' => 'application/activity+json' ],
-                            'body'    => wp_json_encode( $payload ),
-                            'timeout' => 15,
-                        ]
-                    );
-                }
-
-                $success = true;
-            } else {
-=======
             if ( '' === $title || '' === $content || '' === $price || '' === $location ) {
->>>>>>> main:fed-classifieds.php
                 $error = true;
             } else {
                 $post_id = wp_insert_post(
@@ -641,7 +598,7 @@ function fed_classifieds_form_shortcode() {
 
                 if ( ! is_wp_error( $post_id ) ) {
                     if ( $cat ) {
-                        wp_set_post_terms( $post_id, [ $cat ], 'category' );
+                        wp_set_post_terms( $post_id, [ $cat ], 'listing_category' );
                     }
                     if ( $type ) {
                         update_post_meta( $post_id, '_listing_type', $type );
@@ -661,7 +618,7 @@ function fed_classifieds_form_shortcode() {
                                 'name'        => $title,
                                 'content'     => $content,
                                 'url'         => get_permalink( $post_id ),
-                                'category'    => array_values( wp_get_post_terms( $post_id, 'category', [ 'fields' => 'names' ] ) ),
+                                'category'    => array_values( wp_get_post_terms( $post_id, 'listing_category', [ 'fields' => 'names' ] ) ),
                                 'listingType' => $type,
                                 'price'       => $price,
                                 'location'    => $location,
@@ -687,7 +644,7 @@ function fed_classifieds_form_shortcode() {
 
     wp_enqueue_style( 'classyfeds', plugin_dir_url( __FILE__ ) . 'assets/css/classyfeds.css', [], '0.1.0' );
 
-    $cats = get_terms( [ 'taxonomy' => 'category', 'hide_empty' => false ] );
+    $cats = get_terms( [ 'taxonomy' => 'listing_category', 'hide_empty' => false ] );
 
     ob_start();
 
@@ -718,17 +675,13 @@ function fed_classifieds_form_shortcode() {
     }
     echo '</select></p>';
 
-<<<<<<< HEAD:classyfeds.php
-    echo '<p><input type="submit" name="classyfeds_submit" value="' . esc_attr__( 'Submit', 'classyfeds' ) . '" /></p>';
-=======
-    echo '<p><label for="listing_price">' . esc_html__( 'Price', 'fed-classifieds' ) . '</label><br />';
+    echo '<p><label for="listing_price">' . esc_html__( 'Price', 'classyfeds' ) . '</label><br />';
     echo '<input type="number" id="listing_price" name="listing_price" required /></p>';
 
-    echo '<p><label for="listing_location">' . esc_html__( 'Location', 'fed-classifieds' ) . '</label><br />';
+    echo '<p><label for="listing_location">' . esc_html__( 'Location', 'classyfeds' ) . '</label><br />';
     echo '<input type="text" id="listing_location" name="listing_location" required /></p>';
 
-    echo '<p><input type="submit" name="fed_classifieds_submit" value="' . esc_attr__( 'Submit', 'fed-classifieds' ) . '" /></p>';
->>>>>>> main:fed-classifieds.php
+    echo '<p><input type="submit" name="classyfeds_submit" value="' . esc_attr__( 'Submit', 'classyfeds' ) . '" /></p>';
     echo '</form>';
 
     return ob_get_clean();
