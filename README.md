@@ -37,3 +37,5 @@ Alternatively, copy `fed-classifieds.php` to `wp-content/plugins/fed-classifieds
 On activation the plugin creates a **Classifieds** page. Its ID is stored in the `fed_classifieds_page_id` option and can be changed to use an existing page.
 
 The page uses a bundled template that lists local `listing` posts along with any ActivityPub objects that were `POST`ed to `/wp-json/fed-classifieds/v1/inbox`. All listings and received objects are also exposed as an ActivityStreams collection via `GET /wp-json/fed-classifieds/v1/listings`.
+
+brein fog
