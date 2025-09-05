@@ -372,16 +372,78 @@ function fed_classifieds_listings_handler( WP_REST_Request $request ) {
     return new WP_REST_Response( $collection );
 }
 
-                wp_remote_post( $remote, [
-                    'headers' => [ 'Content-Type' => 'application/activity+json' ],
-                    'body'    => wp_json_encode( $payload ),
-                    'timeout' => 15,
-                ] );
-            }
+add_shortcode( 'fed_classifieds_form', 'fed_classifieds_form_shortcode' );
 
-            $success = true;
-        } else {
+/**
+ * Shortcode handler for `[fed_classifieds_form]`.
+ *
+ * Displays a submission form that allows visitors to create new listings.
+ * Submitted listings are stored locally and optionally forwarded to a
+ * configurable ActivityPub inbox via the `fed_classifieds_remote_inbox`
+ * option.
+ *
+ * @return string Form HTML.
+ */
+function fed_classifieds_form_shortcode() {
+    $success = false;
+    $error   = false;
+
+    if ( isset( $_POST['fed_classifieds_submit'] ) ) {
+        if ( ! isset( $_POST['fed_classifieds_nonce'] ) || ! wp_verify_nonce( $_POST['fed_classifieds_nonce'], 'fed_classifieds_new_listing' ) ) {
             $error = true;
+        } else {
+            $title   = isset( $_POST['listing_title'] ) ? sanitize_text_field( wp_unslash( $_POST['listing_title'] ) ) : '';
+            $content = isset( $_POST['listing_content'] ) ? wp_kses_post( wp_unslash( $_POST['listing_content'] ) ) : '';
+            $type    = isset( $_POST['listing_type'] ) ? sanitize_text_field( wp_unslash( $_POST['listing_type'] ) ) : '';
+            $cat     = isset( $_POST['listing_category'] ) ? absint( wp_unslash( $_POST['listing_category'] ) ) : 0;
+
+            $post_id = wp_insert_post(
+                [
+                    'post_type'   => 'listing',
+                    'post_status' => 'publish',
+                    'post_title'  => $title,
+                    'post_content'=> $content,
+                ],
+                true
+            );
+
+            if ( ! is_wp_error( $post_id ) ) {
+                if ( $cat ) {
+                    wp_set_post_terms( $post_id, [ $cat ], 'category' );
+                }
+                if ( $type ) {
+                    update_post_meta( $post_id, '_listing_type', $type );
+                }
+
+                $remote = get_option( 'fed_classifieds_remote_inbox' );
+                if ( $remote ) {
+                    $payload = [
+                        '@context' => 'https://www.w3.org/ns/activitystreams',
+                        'type'     => 'Create',
+                        'actor'    => home_url(),
+                        'object'   => [
+                            'type'        => 'Note',
+                            'name'        => $title,
+                            'content'     => $content,
+                            'url'         => get_permalink( $post_id ),
+                            'category'    => array_values( wp_get_post_terms( $post_id, 'category', [ 'fields' => 'names' ] ) ),
+                            'listingType' => $type,
+                        ],
+                    ];
+                    wp_remote_post(
+                        $remote,
+                        [
+                            'headers' => [ 'Content-Type' => 'application/activity+json' ],
+                            'body'    => wp_json_encode( $payload ),
+                            'timeout' => 15,
+                        ]
+                    );
+                }
+
+                $success = true;
+            } else {
+                $error = true;
+            }
         }
     }
 
