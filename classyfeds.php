@@ -203,7 +203,7 @@ function classyfeds_activate() {
                     'post_name'    => 'submit-listing',
                     'post_status'  => 'publish',
                     'post_type'    => 'page',
-                    'post_content' => '[fed_classifieds_form]',
+                    'post_content' => '[classyfeds_form]',
                 ]
             );
         }
