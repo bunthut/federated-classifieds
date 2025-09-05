@@ -55,11 +55,96 @@ function fed_classifieds_aggregator_activate() {
 register_activation_hook( __FILE__, 'fed_classifieds_aggregator_activate' );
 
 /**
+ * Register settings page in the admin under Settings → Classifieds Aggregator.
+ */
+add_action( 'admin_menu', function() {
+    add_options_page(
+        __( 'Classifieds Aggregator', 'fed-classifieds-aggregator' ),
+        __( 'Classifieds Aggregator', 'fed-classifieds-aggregator' ),
+        'manage_options',
+        'fed-classifieds-aggregator',
+        'fed_classifieds_aggregator_settings_page'
+    );
+} );
+
+/**
+ * Render settings page for selecting the aggregator page.
+ */
+function fed_classifieds_aggregator_settings_page() {
+    if ( ! current_user_can( 'manage_options' ) ) {
+        return;
+    }
+
+    $message = '';
+
+    if ( isset( $_POST['fed_classifieds_save'] ) && check_admin_referer( 'fed_classifieds_save_settings', 'fed_classifieds_nonce' ) ) {
+        $page_id = isset( $_POST['fed_classifieds_page_id'] ) ? absint( wp_unslash( $_POST['fed_classifieds_page_id'] ) ) : 0;
+        $slug    = isset( $_POST['fed_classifieds_slug'] ) ? sanitize_title( wp_unslash( $_POST['fed_classifieds_slug'] ) ) : '';
+
+        if ( $slug ) {
+            $page = get_page_by_path( $slug );
+            if ( $page ) {
+                $page_id = $page->ID;
+            } else {
+                $page_id = wp_insert_post(
+                    [
+                        'post_title'  => ucwords( str_replace( '-', ' ', $slug ) ),
+                        'post_name'   => $slug,
+                        'post_status' => 'publish',
+                        'post_type'   => 'page',
+                    ]
+                );
+            }
+        }
+
+        if ( $page_id ) {
+            update_option( 'fed_classifieds_page_id', $page_id );
+            $message = __( 'Settings saved.', 'fed-classifieds-aggregator' );
+        }
+    }
+
+    $current_page = (int) get_option( 'fed_classifieds_page_id' );
+    $page_link    = $current_page ? get_permalink( $current_page ) : '';
+
+    echo '<div class="wrap">';
+    echo '<h1>' . esc_html__( 'Classifieds Aggregator', 'fed-classifieds-aggregator' ) . '</h1>';
+
+    if ( $message ) {
+        echo '<div class="updated"><p>' . esc_html( $message ) . '</p></div>';
+    }
+
+    echo '<form method="post">';
+    wp_nonce_field( 'fed_classifieds_save_settings', 'fed_classifieds_nonce' );
+
+    echo '<table class="form-table">';
+    echo '<tr><th scope="row">' . esc_html__( 'Page', 'fed-classifieds-aggregator' ) . '</th><td>';
+    wp_dropdown_pages(
+        [
+            'name'             => 'fed_classifieds_page_id',
+            'selected'         => $current_page,
+            'show_option_none' => __( '— Select —', 'fed-classifieds-aggregator' ),
+        ]
+    );
+    echo '</td></tr>';
+    echo '<tr><th scope="row">' . esc_html__( 'or Slug', 'fed-classifieds-aggregator' ) . '</th><td><input type="text" name="fed_classifieds_slug" value="" class="regular-text" /></td></tr>';
+    echo '</table>';
+
+    submit_button( __( 'Save Changes', 'fed-classifieds-aggregator' ), 'primary', 'fed_classifieds_save' );
+
+    if ( $page_link ) {
+        echo '<p><a class="button" href="' . esc_url( $page_link ) . '" target="_blank">' . esc_html__( 'Open Aggregator Page', 'fed-classifieds-aggregator' ) . '</a></p>';
+    }
+
+    echo '</form>';
+    echo '</div>';
+}
+
+/**
  * Load template for the Classifieds page.
  */
 add_filter( 'template_include', function( $template ) {
     $page_id = (int) get_option( 'fed_classifieds_page_id' );
-    if ( $page_id && is_page( $page_id ) ) {
+    if ( $page_id && (int) get_queried_object_id() === $page_id ) {
         $new_template = plugin_dir_path( __FILE__ ) . 'templates/aggregator-page.php';
         if ( file_exists( $new_template ) ) {
             return $new_template;
@@ -73,7 +158,7 @@ add_filter( 'template_include', function( $template ) {
  */
 add_action( 'wp_enqueue_scripts', function() {
     $page_id = (int) get_option( 'fed_classifieds_page_id' );
-    if ( $page_id && is_page( $page_id ) ) {
+    if ( $page_id && (int) get_queried_object_id() === $page_id ) {
         wp_enqueue_style( 'fed-classifieds', plugin_dir_url( __FILE__ ) . 'assets/css/fed-classifieds.css', [], '0.1.0' );
         wp_enqueue_script( 'fed-classifieds', plugin_dir_url( __FILE__ ) . 'assets/js/fed-classifieds.js', [ 'jquery' ], '0.1.0', true );
     }
