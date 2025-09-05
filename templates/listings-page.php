@@ -30,6 +30,10 @@ get_header(); ?>
                     <div class="entry-content">
                         <?php
                         if ( 'listing' === get_post_type() ) {
+                            $type = get_post_meta( get_the_ID(), '_listing_type', true );
+                            if ( $type ) {
+                                echo '<p class="listing-type">' . esc_html( $type ) . '</p>';
+                            }
                             the_excerpt();
                         } else {
                             $data = json_decode( get_the_content(), true );
@@ -52,4 +56,4 @@ get_header(); ?>
     </main>
 </div>
 
-<?php get_footer();
+<?php get_footer(); ?>
