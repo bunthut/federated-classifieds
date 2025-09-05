@@ -239,44 +239,49 @@ function fed_classifieds_aggregator_inbox_handler( WP_REST_Request $request ) {
 /**
  * Expose aggregated listings as an ActivityStreams Collection.
  *
- * @return WP_REST_Response
+ * @return WP_REST_Response Response.
  */
 function fed_classifieds_aggregator_listings_handler() {
-    $posts = get_posts(
+    $query = new WP_Query(
         [
-            'post_type'   => [ 'listing', 'ap_object' ],
-            'post_status' => 'publish',
-            'numberposts' => -1,
+            'post_type'      => [ 'listing', 'ap_object' ],
+            'post_status'    => 'publish',
+            'posts_per_page' => -1,
         ]
     );
 
     $items = [];
-    foreach ( $posts as $post ) {
-        if ( 'listing' === $post->post_type ) {
-            $cats   = wp_get_post_terms( $post->ID, 'category', [ 'fields' => 'names' ] );
-            $object = [
-                'id'          => get_permalink( $post ),
-                'type'        => 'Note',
-                'name'        => get_the_title( $post ),
-                'content'     => wp_kses_post( $post->post_content ),
-                'url'         => get_permalink( $post ),
-                'published'   => get_post_time( 'c', true, $post ),
-                'attributedTo'=> home_url(),
-                'category'    => $cats,
-                'listingType' => get_post_meta( $post->ID, '_listing_type', true ),
-            ];
-            $items[] = $object;
-        } else {
+
+    foreach ( $query->posts as $post ) {
+        if ( 'ap_object' === $post->post_type ) {
             $data = json_decode( $post->post_content, true );
             if ( is_array( $data ) ) {
+                if ( empty( $data['@context'] ) ) {
+                    $data['@context'] = 'https://www.w3.org/ns/activitystreams';
+                }
                 $items[] = $data;
+                continue;
             }
         }
+
+        $cats = wp_get_post_terms( $post->ID, 'category', [ 'fields' => 'names' ] );
+        $items[] = [
+            '@context'     => 'https://www.w3.org/ns/activitystreams',
+            'id'           => get_permalink( $post ),
+            'type'         => 'Note',
+            'name'         => get_the_title( $post ),
+            'content'      => apply_filters( 'the_content', $post->post_content ),
+            'url'          => get_permalink( $post ),
+            'published'    => mysql2date( 'c', $post->post_date_gmt, false ),
+            'attributedTo' => home_url(),
+            'category'     => $cats,
+            'listingType'  => get_post_meta( $post->ID, '_listing_type', true ),
+        ];
     }
 
     $collection = [
         '@context'     => 'https://www.w3.org/ns/activitystreams',
-        'id'           => home_url( '/wp-json/fed-classifieds/v1/listings' ),
+        'id'           => rest_url( 'fed-classifieds/v1/listings' ),
         'type'         => 'OrderedCollection',
         'totalItems'   => count( $items ),
         'orderedItems' => $items,
