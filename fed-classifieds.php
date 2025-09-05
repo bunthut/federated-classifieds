@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Fed Classifieds (MVP)
  * Description: Custom post type "listing" with JSON-LD output and auto-expiration for a federated classifieds network.
- * Version: 0.1.1
+ * Version: 0.1.3
  * Author: thomi@etik.com + amis
  */
 
@@ -28,7 +28,6 @@ add_action( 'init', function() {
     ] );
 } );
 
-
 /**
  * Add "Typ" dropdown to the listing editor.
  */
@@ -51,10 +50,6 @@ add_action( 'add_meta_boxes', function() {
 
 /**
  * Register a custom post type for storing incoming ActivityPub objects.
- *
- * These objects are used to represent remote listings that arrive through
- * the federated inbox endpoint. The posts are not public but can be queried
- * so they may appear alongside local listings on the listings page template.
  */
 add_action( 'init', function() {
     register_post_type( 'ap_object', [
@@ -84,7 +79,6 @@ add_action( 'init', function() {
     ] );
 } );
 
-
 /**
  * Save listing type and set default expiration date (60 days).
  */
@@ -112,18 +106,15 @@ add_action( 'save_post_listing', function( $post_id, $post, $update ) {
 /**
  * Handle plugin activation tasks.
  *
- * Creates the "Classifieds" page if it does not exist and schedules the
- * daily expiration event.
+ * Creates the "Classifieds" page if it does not exist, ensures a submission page,
+ * registers roles/capabilities and schedules the daily expiration event.
  */
 function fed_classifieds_activate() {
+    // Create/find "Classifieds" page.
     $page_id = (int) get_option( 'fed_classifieds_page_id' );
-
-    if ( $page_id && get_post( $page_id ) ) {
-        // Page already exists and is stored in options.
-    } else {
+    if ( ! ( $page_id && get_post( $page_id ) ) ) {
         $page    = get_page_by_path( 'classifieds' );
         $page_id = $page ? $page->ID : 0;
-
         if ( ! $page_id ) {
             $page_id = wp_insert_post( [
                 'post_title'  => __( 'Classifieds', 'fed-classifieds' ),
@@ -132,39 +123,30 @@ function fed_classifieds_activate() {
                 'post_type'   => 'page',
             ] );
         }
-
         if ( $page_id ) {
             update_option( 'fed_classifieds_page_id', $page_id );
         }
     }
 
-    if ( ! wp_next_scheduled( 'fed_classifieds_expire_event' ) ) {
-        wp_schedule_event( time(), 'daily', 'fed_classifieds_expire_event' );
-    }
-
-    // Insert default categories and optional subcategories similar to popular classifieds sites.
+    // Seed default categories + children (ein petit aperçu populärer Rubriken).
     $default_categories = [
-        'Auto, Rad & Boot'              => [ 'Autos', 'Motorräder', 'Boote', 'Fahrräder' ],
-        'Elektronik'                    => [ 'Computer', 'Handys & Telefone', 'TV, Video & Audio' ],
-        'Haus & Garten'                 => [ 'Möbel & Wohnen', 'Haushaltsgeräte', 'Heimwerker & Bau' ],
-        'Mode & Beauty'                 => [],
+        'Auto, Rad & Boot'                => [ 'Autos', 'Motorräder', 'Boote', 'Fahrräder' ],
+        'Elektronik'                      => [ 'Computer', 'Handys & Telefone', 'TV, Video & Audio' ],
+        'Haus & Garten'                   => [ 'Möbel & Wohnen', 'Haushaltsgeräte', 'Heimwerker & Bau' ],
+        'Mode & Beauty'                   => [],
         'Freizeit, Hobby & Nachbarschaft' => [],
-        'Familie, Kind & Baby'          => [],
-        'Dienstleistungen'              => [],
-        'Jobs'                          => [],
-        'Immobilien'                    => [],
+        'Familie, Kind & Baby'            => [],
+        'Dienstleistungen'                => [],
+        'Jobs'                            => [],
+        'Immobilien'                      => [],
     ];
     foreach ( $default_categories as $parent => $children ) {
         $existing  = term_exists( $parent, 'category' );
-        $parent_id = 0;
-
-        if ( $existing ) {
-            $parent_id = is_array( $existing ) ? $existing['term_id'] : $existing;
-        } else {
+        $parent_id = $existing ? ( is_array( $existing ) ? $existing['term_id'] : $existing ) : 0;
+        if ( ! $parent_id ) {
             $term      = wp_insert_term( $parent, 'category' );
             $parent_id = is_wp_error( $term ) ? 0 : $term['term_id'];
         }
-
         if ( $parent_id && ! empty( $children ) ) {
             foreach ( $children as $child ) {
                 if ( ! term_exists( $child, 'category' ) ) {
@@ -174,10 +156,50 @@ function fed_classifieds_activate() {
         }
     }
 
+    // Ensure a submission page exists with the listing form shortcode.
+    $form_page_id = (int) get_option( 'fed_classifieds_form_page_id' );
+    if ( ! ( $form_page_id && get_post( $form_page_id ) ) ) {
+        $page         = get_page_by_path( 'submit-listing' );
+        $form_page_id = $page ? $page->ID : 0;
+        if ( ! $form_page_id ) {
+            $form_page_id = wp_insert_post( [
+                'post_title'   => __( 'Submit Listing', 'fed-classifieds' ),
+                'post_name'    => 'submit-listing',
+                'post_status'  => 'publish',
+                'post_type'    => 'page',
+                'post_content' => '[fed_classifieds_form]',
+            ] );
+        }
+        if ( $form_page_id ) {
+            update_option( 'fed_classifieds_form_page_id', $form_page_id );
+        }
+    }
+
+    // Register custom role & capability, and assign to default roles.
+    if ( ! get_role( 'listing_contributor' ) ) {
+        add_role( 'listing_contributor', __( 'Listing Contributor', 'fed-classifieds' ), [
+            'read'             => true,
+            'publish_listings' => true,
+        ] );
+    }
+
+    $default_roles = [ 'author', 'listing_contributor' ];
+    update_option( 'fed_classifieds_publish_roles', $default_roles );
+    foreach ( $default_roles as $role_name ) {
+        $role = get_role( $role_name );
+        if ( $role ) {
+            $role->add_cap( 'publish_listings' );
+        }
+    }
+
+    // Schedule daily expiration.
+    if ( ! wp_next_scheduled( 'fed_classifieds_expire_event' ) ) {
+        wp_schedule_event( time(), 'daily', 'fed_classifieds_expire_event' );
+    }
+
     // Flush rewrite rules to ensure custom routes are registered.
     flush_rewrite_rules();
 }
-
 register_activation_hook( __FILE__, 'fed_classifieds_activate' );
 
 register_deactivation_hook( __FILE__, function() {
@@ -185,6 +207,76 @@ register_deactivation_hook( __FILE__, function() {
     flush_rewrite_rules();
 } );
 
+/**
+ * Add settings page under Options → Classifieds.
+ */
+add_action( 'admin_menu', function() {
+    add_options_page(
+        __( 'Classifieds', 'fed-classifieds' ),
+        __( 'Classifieds', 'fed-classifieds' ),
+        'manage_options',
+        'fed-classifieds',
+        'fed_classifieds_settings_page'
+    );
+} );
+
+/**
+ * Render settings page for selecting roles that may publish listings.
+ */
+function fed_classifieds_settings_page() {
+    if ( ! current_user_can( 'manage_options' ) ) {
+        return;
+    }
+
+    $editable_roles = get_editable_roles();
+    $selected       = (array) get_option( 'fed_classifieds_publish_roles', [] );
+    $message        = '';
+
+    if ( isset( $_POST['fed_classifieds_save'] ) && check_admin_referer( 'fed_classifieds_save_settings', 'fed_classifieds_nonce' ) ) {
+        $selected = isset( $_POST['publish_roles'] ) ? array_map( 'sanitize_text_field', (array) wp_unslash( $_POST['publish_roles'] ) ) : [];
+        update_option( 'fed_classifieds_publish_roles', $selected );
+
+        foreach ( $editable_roles as $role_key => $details ) {
+            $role = get_role( $role_key );
+            if ( ! $role ) {
+                continue;
+            }
+            if ( in_array( $role_key, $selected, true ) ) {
+                $role->add_cap( 'publish_listings' );
+            } else {
+                $role->remove_cap( 'publish_listings' );
+            }
+        }
+        $message = __( 'Settings saved.', 'fed-classifieds' );
+    }
+
+    echo '<div class="wrap">';
+    echo '<h1>' . esc_html__( 'Classifieds', 'fed-classifieds' ) . '</h1>';
+
+    if ( $message ) {
+        echo '<div class="updated"><p>' . esc_html( $message ) . '</p></div>';
+    }
+
+    echo '<form method="post">';
+    wp_nonce_field( 'fed_classifieds_save_settings', 'fed_classifieds_nonce' );
+
+    echo '<table class="form-table">';
+    echo '<tr><th scope="row">' . esc_html__( 'Roles that can publish listings', 'fed-classifieds' ) . '</th><td>';
+    foreach ( $editable_roles as $role_key => $details ) {
+        echo '<label><input type="checkbox" name="publish_roles[]" value="' . esc_attr( $role_key ) . '" ' . checked( in_array( $role_key, $selected, true ), true, false ) . ' /> ' . esc_html( $details['name'] ) . '</label><br />';
+    }
+    echo '</td></tr>';
+    echo '</table>';
+
+    submit_button( __( 'Save Changes', 'fed-classifieds' ), 'primary', 'fed_classifieds_save' );
+
+    echo '</form>';
+    echo '</div>';
+}
+
+/**
+ * Cron: expire old listings.
+ */
 add_action( 'fed_classifieds_expire_event', function() {
     $now   = current_time( 'timestamp' );
     $posts = get_posts( [
@@ -216,11 +308,11 @@ add_action( 'wp_head', function() {
     $image   = get_the_post_thumbnail_url( $post->ID, 'full' );
 
     $data = [
-        '@context' => 'https://schema.org/',
-        '@type'    => 'Offer',
-        'name'     => get_the_title( $post ),
-        'description' => wp_strip_all_tags( get_the_excerpt( $post ) ),
-        'url'      => get_permalink( $post ),
+        '@context'   => 'https://schema.org/',
+        '@type'      => 'Offer',
+        'name'       => get_the_title( $post ),
+        'description'=> wp_strip_all_tags( get_the_excerpt( $post ) ),
+        'url'        => get_permalink( $post ),
     ];
 
     if ( $image ) {
@@ -254,250 +346,5 @@ add_filter( 'template_include', function( $template ) {
  * Enqueue frontend assets for the Classifieds page.
  */
 add_action( 'wp_enqueue_scripts', function() {
-    $page_id = (int) get_option( 'fed_classifieds_page_id' );
-    if ( $page_id && is_page( $page_id ) ) {
-        wp_enqueue_style( 'fed-classifieds', plugin_dir_url( __FILE__ ) . 'assets/css/fed-classifieds.css', [], '0.1.0' );
-        wp_enqueue_script( 'fed-classifieds', plugin_dir_url( __FILE__ ) . 'assets/js/fed-classifieds.js', [ 'jquery' ], '0.1.0', true );
-    }
-} );
+    $pa
 
-/**
- * Register ActivityPub REST endpoints.
- */
-add_action( 'rest_api_init', function() {
-    register_rest_route(
-        'fed-classifieds/v1',
-        '/inbox',
-        [
-            'methods'             => WP_REST_Server::CREATABLE,
-            'callback'            => 'fed_classifieds_inbox_handler',
-            'permission_callback' => '__return_true',
-        ]
-    );
-
-    register_rest_route(
-        'fed-classifieds/v1',
-        '/listings',
-        [
-            'methods'             => WP_REST_Server::READABLE,
-            'callback'            => 'fed_classifieds_listings_handler',
-            'permission_callback' => '__return_true',
-        ]
-    );
-} );
-
-/**
- * Handle incoming ActivityPub objects and store them as "ap_object" posts.
- *
- * Supports bare objects as well as "Create" activities wrapping an object.
- *
- * @param WP_REST_Request $request Request object.
- * @return WP_REST_Response Response.
- */
-function fed_classifieds_inbox_handler( WP_REST_Request $request ) {
-    $activity = $request->get_json_params();
-
-    if ( empty( $activity ) || ! is_array( $activity ) ) {
-        return new WP_REST_Response( [ 'error' => 'Invalid object' ], 400 );
-    }
-
-    $object = $activity;
-    if ( isset( $activity['type'] ) && 'Create' === $activity['type'] && ! empty( $activity['object'] ) ) {
-        $object = $activity['object'];
-    }
-
-    $title = '';
-    if ( isset( $object['name'] ) ) {
-        $title = sanitize_text_field( $object['name'] );
-    } elseif ( isset( $object['summary'] ) ) {
-        $title = sanitize_text_field( $object['summary'] );
-    } else {
-        $title = __( 'Remote ActivityPub Object', 'fed-classifieds' );
-    }
-
-    $post_id = wp_insert_post(
-        [
-            'post_type'   => 'ap_object',
-            'post_status' => 'publish',
-            'post_title'  => $title,
-            'post_content'=> wp_json_encode( $object ),
-        ],
-        true
-    );
-
-    if ( is_wp_error( $post_id ) ) {
-        return new WP_REST_Response( [ 'error' => 'Could not store object' ], 500 );
-    }
-
-    return new WP_REST_Response( [ 'stored' => $post_id ], 202 );
-}
-
-/**
-/**
- * Retrieve listings and ActivityPub objects as an ActivityStreams collection.
- *
- * @param WP_REST_Request $request Request object.
- * @return WP_REST_Response Response.
- */
-function fed_classifieds_listings_handler( WP_REST_Request $request ) {
-    $query = new WP_Query(
-        [
-            'post_type'      => [ 'listing', 'ap_object' ],
-            'post_status'    => 'publish',
-            'posts_per_page' => -1,
-        ]
-    );
-
-    $items = [];
-
-    foreach ( $query->posts as $post ) {
-        if ( 'ap_object' === $post->post_type ) {
-            $data = json_decode( $post->post_content, true );
-            if ( is_array( $data ) ) {
-                if ( empty( $data['@context'] ) ) {
-                    $data['@context'] = 'https://www.w3.org/ns/activitystreams';
-                }
-                $items[] = $data;
-                continue;
-            }
-        }
-
-        $cats = wp_get_post_terms( $post->ID, 'category', [ 'fields' => 'names' ] );
-        $items[] = [
-            '@context'     => 'https://www.w3.org/ns/activitystreams',
-            'id'           => get_permalink( $post ),
-            'type'         => 'Note',
-            'name'         => get_the_title( $post ),
-            'content'      => apply_filters( 'the_content', $post->post_content ),
-            'url'          => get_permalink( $post ),
-            'published'    => mysql2date( 'c', $post->post_date_gmt, false ),
-            'attributedTo' => home_url(),
-            'category'     => $cats,
-            'listingType'  => get_post_meta( $post->ID, '_listing_type', true ),
-        ];
-    }
-
-    $collection = [
-        '@context'     => 'https://www.w3.org/ns/activitystreams',
-        'id'           => rest_url( 'fed-classifieds/v1/listings' ),
-        'type'         => 'OrderedCollection',
-        'totalItems'   => count( $items ),
-        'orderedItems' => $items,
-    ];
-
-    return new WP_REST_Response( $collection );
-}
-
-add_shortcode( 'fed_classifieds_form', 'fed_classifieds_form_shortcode' );
-
-/**
- * Shortcode handler for `[fed_classifieds_form]`.
- *
- * Displays a submission form that allows visitors to create new listings.
- * Submitted listings are stored locally and optionally forwarded to a
- * configurable ActivityPub inbox via the `fed_classifieds_remote_inbox`
- * option.
- *
- * @return string Form HTML.
- */
-function fed_classifieds_form_shortcode() {
-    $success = false;
-    $error   = false;
-
-    if ( isset( $_POST['fed_classifieds_submit'] ) ) {
-        if ( ! isset( $_POST['fed_classifieds_nonce'] ) || ! wp_verify_nonce( $_POST['fed_classifieds_nonce'], 'fed_classifieds_new_listing' ) ) {
-            $error = true;
-        } else {
-            $title   = isset( $_POST['listing_title'] ) ? sanitize_text_field( wp_unslash( $_POST['listing_title'] ) ) : '';
-            $content = isset( $_POST['listing_content'] ) ? wp_kses_post( wp_unslash( $_POST['listing_content'] ) ) : '';
-            $type    = isset( $_POST['listing_type'] ) ? sanitize_text_field( wp_unslash( $_POST['listing_type'] ) ) : '';
-            $cat     = isset( $_POST['listing_category'] ) ? absint( wp_unslash( $_POST['listing_category'] ) ) : 0;
-
-            $post_id = wp_insert_post(
-                [
-                    'post_type'   => 'listing',
-                    'post_status' => 'publish',
-                    'post_title'  => $title,
-                    'post_content'=> $content,
-                ],
-                true
-            );
-
-            if ( ! is_wp_error( $post_id ) ) {
-                if ( $cat ) {
-                    wp_set_post_terms( $post_id, [ $cat ], 'category' );
-                }
-                if ( $type ) {
-                    update_post_meta( $post_id, '_listing_type', $type );
-                }
-
-                $remote = get_option( 'fed_classifieds_remote_inbox' );
-                if ( $remote ) {
-                    $payload = [
-                        '@context' => 'https://www.w3.org/ns/activitystreams',
-                        'type'     => 'Create',
-                        'actor'    => home_url(),
-                        'object'   => [
-                            'type'        => 'Note',
-                            'name'        => $title,
-                            'content'     => $content,
-                            'url'         => get_permalink( $post_id ),
-                            'category'    => array_values( wp_get_post_terms( $post_id, 'category', [ 'fields' => 'names' ] ) ),
-                            'listingType' => $type,
-                        ],
-                    ];
-                    wp_remote_post(
-                        $remote,
-                        [
-                            'headers' => [ 'Content-Type' => 'application/activity+json' ],
-                            'body'    => wp_json_encode( $payload ),
-                            'timeout' => 15,
-                        ]
-                    );
-                }
-
-                $success = true;
-            } else {
-                $error = true;
-            }
-        }
-    }
-
-    wp_enqueue_style( 'fed-classifieds', plugin_dir_url( __FILE__ ) . 'assets/css/fed-classifieds.css', [], '0.1.0' );
-
-    $cats = get_terms( [ 'taxonomy' => 'category', 'hide_empty' => false ] );
-
-    ob_start();
-
-    if ( $success ) {
-        echo '<p class="fed-classifieds-success">' . esc_html__( 'Listing submitted.', 'fed-classifieds' ) . '</p>';
-    } elseif ( $error ) {
-        echo '<p class="fed-classifieds-error">' . esc_html__( 'Could not submit listing.', 'fed-classifieds' ) . '</p>';
-    }
-
-    echo '<form method="post" class="fed-classifieds-form">';
-    wp_nonce_field( 'fed_classifieds_new_listing', 'fed_classifieds_nonce' );
-    echo '<p><label for="listing_title">' . esc_html__( 'Title', 'fed-classifieds' ) . '</label><br />';
-    echo '<input type="text" id="listing_title" name="listing_title" required /></p>';
-
-    echo '<p><label for="listing_content">' . esc_html__( 'Description', 'fed-classifieds' ) . '</label><br />';
-    echo '<textarea id="listing_content" name="listing_content" rows="5" required></textarea></p>';
-
-    echo '<p><label for="listing_type">' . esc_html__( 'Typ', 'fed-classifieds' ) . '</label><br />';
-    echo '<select id="listing_type" name="listing_type">';
-    echo '<option value="Angebot">' . esc_html__( 'Angebot', 'fed-classifieds' ) . '</option>';
-    echo '<option value="Gesuch">' . esc_html__( 'Gesuch', 'fed-classifieds' ) . '</option>';
-    echo '</select></p>';
-
-    echo '<p><label for="listing_category">' . esc_html__( 'Category', 'fed-classifieds' ) . '</label><br />';
-    echo '<select id="listing_category" name="listing_category">';
-    foreach ( $cats as $cat ) {
-        echo '<option value="' . esc_attr( $cat->term_id ) . '">' . esc_html( $cat->name ) . '</option>';
-    }
-    echo '</select></p>';
-
-    echo '<p><input type="submit" name="fed_classifieds_submit" value="' . esc_attr__( 'Submit', 'fed-classifieds' ) . '" /></p>';
-    echo '</form>';
-
-    return ob_get_clean();
-}
