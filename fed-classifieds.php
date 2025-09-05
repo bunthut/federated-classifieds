@@ -482,17 +482,39 @@ function fed_classifieds_form_shortcode() {
 
             $remote = get_option( 'fed_classifieds_remote_inbox', '' );
             if ( $remote ) {
-                $cat_name = $cat_id ? get_term_field( 'name', $cat_id, 'category' ) : '';
-                $payload  = [
-                    '@context'    => 'https://www.w3.org/ns/activitystreams',
-                    'type'        => 'Note',
-                    'name'        => $title,
-                    'content'     => $content,
-                    'category'    => $cat_name,
-                    'listingType' => $type,
+                $cat_name  = $cat_id ? get_term_field( 'name', $cat_id, 'category' ) : '';
+                $permalink = get_permalink( $post_id );
+                $published = get_post_time( 'c', true, $post_id );
+                $actor     = home_url( '/actor' );
+
+                $object = [
+                    'id'           => $permalink,
+                    'type'         => 'Note',
+                    'content'      => $content,
+                    'published'    => $published,
+                    'attributedTo' => $actor,
+                    'url'          => $permalink,
                 ];
+
+                if ( $cat_name ) {
+                    $object['category'] = $cat_name;
+                }
+
+                if ( $type ) {
+                    $object['listingType'] = $type;
+                }
+
+                $payload = [
+                    '@context' => 'https://www.w3.org/ns/activitystreams',
+                    'type'     => 'Create',
+                    'actor'    => $actor,
+                    'to'       => [ 'https://www.w3.org/ns/activitystreams#Public' ],
+                    'cc'       => [],
+                    'object'   => $object,
+                ];
+
                 wp_remote_post( $remote, [
-                    'headers' => [ 'Content-Type' => 'application/json' ],
+                    'headers' => [ 'Content-Type' => 'application/activity+json' ],
                     'body'    => wp_json_encode( $payload ),
                     'timeout' => 15,
                 ] );
