@@ -93,3 +93,7 @@ On activation the plugin creates a **Classifieds** page. Its ID is stored in the
 The page uses a bundled template that lists local `listing` posts along with any ActivityPub objects that were `POST`ed to `/wp-json/classyfeds/v1/inbox`. All listings and received objects are also exposed as an ActivityStreams collection via `GET /wp-json/classyfeds/v1/listings`.
 =======
 >>>>>>> main
+
+## Shortcode
+
+Use `[classyfeds_listings]` on any page or post to display the aggregated classifieds listings.
