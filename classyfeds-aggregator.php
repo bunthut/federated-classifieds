@@ -90,7 +90,11 @@ function classyfeds_aggregator_settings_page() {
         return;
     }
 
-    $message = '';
+    $message            = '';
+    $current_page       = (int) get_option( 'classyfeds_page_id' );
+    $remote_inbox       = get_option( 'classyfeds_remote_inbox', '' );
+    $filter_categories  = get_option( 'classyfeds_filter_categories', '' );
+    $filter_posts       = (int) get_option( 'classyfeds_filter_posts', 0 );
 
     if ( isset( $_POST['classyfeds_save'] ) && check_admin_referer( 'classyfeds_save_settings', 'classyfeds_nonce' ) ) {
         $page_id = isset( $_POST['classyfeds_page_id'] ) ? absint( wp_unslash( $_POST['classyfeds_page_id'] ) ) : 0;
@@ -112,14 +116,23 @@ function classyfeds_aggregator_settings_page() {
             }
         }
 
+        $remote_inbox      = isset( $_POST['classyfeds_remote_inbox'] ) ? esc_url_raw( wp_unslash( $_POST['classyfeds_remote_inbox'] ) ) : '';
+        $filter_categories = isset( $_POST['classyfeds_filter_categories'] ) ? sanitize_text_field( wp_unslash( $_POST['classyfeds_filter_categories'] ) ) : '';
+        $filter_posts      = isset( $_POST['classyfeds_filter_posts'] ) ? absint( wp_unslash( $_POST['classyfeds_filter_posts'] ) ) : 0;
+
         if ( $page_id ) {
             update_option( 'classyfeds_page_id', $page_id );
-            $message = __( 'Settings saved.', 'classyfeds-aggregator' );
         }
+        update_option( 'classyfeds_remote_inbox', $remote_inbox );
+        update_option( 'classyfeds_filter_categories', $filter_categories );
+        update_option( 'classyfeds_filter_posts', $filter_posts );
+
+        $message = __( 'Settings saved.', 'classyfeds-aggregator' );
+
+        $current_page = $page_id;
     }
 
-    $current_page = (int) get_option( 'classyfeds_page_id' );
-    $page_link    = $current_page ? get_permalink( $current_page ) : '';
+    $page_link = $current_page ? get_permalink( $current_page ) : '';
 
     echo '<div class="wrap">';
     echo '<h1>' . esc_html__( 'Classifieds Aggregator', 'classyfeds-aggregator' ) . '</h1>';
@@ -142,6 +155,9 @@ function classyfeds_aggregator_settings_page() {
     );
     echo '</td></tr>';
     echo '<tr><th scope="row">' . esc_html__( 'or Slug', 'classyfeds-aggregator' ) . '</th><td><input type="text" name="classyfeds_slug" value="" class="regular-text" /></td></tr>';
+    echo '<tr><th scope="row">' . esc_html__( 'Remote Inbox URL', 'classyfeds-aggregator' ) . '</th><td><input type="url" name="classyfeds_remote_inbox" value="' . esc_attr( $remote_inbox ) . '" class="regular-text" /></td></tr>';
+    echo '<tr><th scope="row">' . esc_html__( 'Filter Categories', 'classyfeds-aggregator' ) . '</th><td><input type="text" name="classyfeds_filter_categories" value="' . esc_attr( $filter_categories ) . '" class="regular-text" /><p class="description">' . esc_html__( 'Comma-separated category slugs', 'classyfeds-aggregator' ) . '</p></td></tr>';
+    echo '<tr><th scope="row">' . esc_html__( 'Posts Per Page', 'classyfeds-aggregator' ) . '</th><td><input type="number" name="classyfeds_filter_posts" value="' . esc_attr( $filter_posts ) . '" class="small-text" min="0" /></td></tr>';
     echo '</table>';
 
     submit_button( __( 'Save Changes', 'classyfeds-aggregator' ), 'primary', 'classyfeds_save' );
@@ -176,6 +192,16 @@ add_action( 'wp_enqueue_scripts', function() {
     if ( $page_id && (int) get_queried_object_id() === $page_id ) {
         wp_enqueue_style( 'classyfeds', plugin_dir_url( __FILE__ ) . 'assets/css/classyfeds.css', [], '0.1.0' );
         wp_enqueue_script( 'classyfeds', plugin_dir_url( __FILE__ ) . 'assets/js/classyfeds.js', [ 'jquery' ], '0.1.0', true );
+
+        wp_localize_script(
+            'classyfeds',
+            'classyfedsOptions',
+            [
+                'remoteInbox' => get_option( 'classyfeds_remote_inbox', '' ),
+                'categories'  => get_option( 'classyfeds_filter_categories', '' ),
+                'posts'       => (int) get_option( 'classyfeds_filter_posts', 0 ),
+            ]
+        );
     }
 } );
 
@@ -256,13 +282,30 @@ function classyfeds_aggregator_inbox_handler( WP_REST_Request $request ) {
  * @return WP_REST_Response Response.
  */
 function classyfeds_aggregator_listings_handler() {
-    $query = new WP_Query(
-        [
-            'post_type'      => [ 'listing', 'ap_object' ],
-            'post_status'    => 'publish',
-            'posts_per_page' => -1,
-        ]
-    );
+    $remote_inbox      = get_option( 'classyfeds_remote_inbox', '' );
+    $filter_categories = get_option( 'classyfeds_filter_categories', '' );
+    $filter_posts      = (int) get_option( 'classyfeds_filter_posts', 0 );
+
+    $args = [
+        'post_type'      => [ 'listing', 'ap_object' ],
+        'post_status'    => 'publish',
+        'posts_per_page' => $filter_posts > 0 ? $filter_posts : -1,
+    ];
+
+    if ( $filter_categories ) {
+        $cats = array_filter( array_map( 'sanitize_title', array_map( 'trim', explode( ',', $filter_categories ) ) ) );
+        if ( $cats ) {
+            $args['tax_query'] = [
+                [
+                    'taxonomy' => 'listing_category',
+                    'field'    => 'slug',
+                    'terms'    => $cats,
+                ],
+            ];
+        }
+    }
+
+    $query = new WP_Query( $args );
 
     $items = [];
 
@@ -291,6 +334,32 @@ function classyfeds_aggregator_listings_handler() {
             'category'     => $cats,
             'listingType'  => get_post_meta( $post->ID, '_listing_type', true ),
         ];
+    }
+
+    if ( $remote_inbox ) {
+        $response = wp_remote_get( $remote_inbox );
+        if ( 200 === wp_remote_retrieve_response_code( $response ) ) {
+            $body = wp_remote_retrieve_body( $response );
+            $data = json_decode( $body, true );
+            if ( isset( $data['orderedItems'] ) && is_array( $data['orderedItems'] ) ) {
+                foreach ( $data['orderedItems'] as $item ) {
+                    if ( ! empty( $cats ) ) {
+                        $item_cats = [];
+                        if ( isset( $item['category'] ) ) {
+                            $item_cats = (array) $item['category'];
+                        }
+                        if ( ! array_intersect( $cats, $item_cats ) ) {
+                            continue;
+                        }
+                    }
+                    $items[] = $item;
+                }
+            }
+        }
+    }
+
+    if ( $filter_posts > 0 ) {
+        $items = array_slice( $items, 0, $filter_posts );
     }
 
     $collection = [
