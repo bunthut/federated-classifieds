@@ -1,5 +1,8 @@
 # Classyfeds
+<<<<<<< HEAD
+=======
 ### Federated Classifieds
+>>>>>>> main
 
 === Classifieds ===
 Contributors: thomi, amis  
@@ -46,6 +49,12 @@ A minimal WordPress plugin providing a `listing` custom post type, JSON-LD marku
 - Adds default expiration 60 days after publish and moves listings to an `expired` status via daily cron.
 - Outputs [schema.org](https://schema.org) Offer data as JSON-LD for each listing.
 - Intended to work alongside companion plugins such as [ActivityPub](https://wordpress.org/plugins/activitypub/) and [WebSub](https://wordpress.org/plugins/websub-publisher/).
+<<<<<<< HEAD
+- Provides a `[classyfeds_form]` shortcode for frontend submissions that can forward listings to a configurable ActivityPub inbox.
+- On activation some default categories common to classifieds sites are created for convenience.
+- Exposes `/wp-json/classyfeds/v1/inbox` (POST) for incoming ActivityPub objects and `/wp-json/classyfeds/v1/listings` (GET) to retrieve them together with local listings.
+- Creates a "Classifieds" page on activation and stores its ID in the `classyfeds_page_id` option.
+=======
 - Provides a `[fed_classifieds_form]` shortcode for frontend submissions that can forward listings to a configurable ActivityPub inbox.
 - On activation, some default categories common to classifieds sites are created for convenience.
 - Automatically creates a "Submit Listing" page with the shortcode, including required price and location fields.
@@ -56,6 +65,7 @@ A minimal WordPress plugin providing a `listing` custom post type, JSON-LD marku
 ## Capabilities
 
 On activation, the plugin creates a `publish_listings` capability and grants it to the built-in Author role as well as a new "Listing Contributor" role. Only users with this capability can submit listings via the `[fed_classifieds_form]` shortcode. Administrators may assign or revoke this capability for other roles under **Settings → Classifieds**.
+>>>>>>> main
 
 ## Build
 
@@ -63,3 +73,23 @@ Run the build script to create distributable plugin archives:
 
 ```bash
 ./build-zip.sh
+<<<<<<< HEAD
+```
+
+This produces `classyfeds.zip` containing `classyfeds.php` and `classyfeds-aggregator.zip` for the standalone aggregator.
+
+## Installation
+
+1. In your WordPress dashboard, go to **Plugins → Add New → Upload Plugin**.
+2. Choose the generated `classyfeds.zip` file and click **Install Now**.
+3. Activate the plugin.
+
+Alternatively, copy `classyfeds.php` to `wp-content/plugins/classyfeds/` and activate it in your WordPress admin.
+
+## Classifieds Page and REST API
+
+On activation the plugin creates a **Classifieds** page. Its ID is stored in the `classyfeds_page_id` option and can be changed to use an existing page.
+
+The page uses a bundled template that lists local `listing` posts along with any ActivityPub objects that were `POST`ed to `/wp-json/classyfeds/v1/inbox`. All listings and received objects are also exposed as an ActivityStreams collection via `GET /wp-json/classyfeds/v1/listings`.
+=======
+>>>>>>> main
