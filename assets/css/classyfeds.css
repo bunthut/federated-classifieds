@@ -1,4 +1,32 @@
+.classyfeds-aggregator {
+    display: flex;
+    gap: 1rem;
+}
+
+.classyfeds-nav {
+    width: 200px;
+}
+
+.classyfeds-nav ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.classyfeds-nav li {
+    margin-bottom: 0.5rem;
+}
+
+.classyfeds-nav a {
+    text-decoration: none;
+}
+
+.classyfeds-nav a.current-cat {
+    font-weight: bold;
+}
+
 .classyfeds-listings {
+    flex: 1;
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
     gap: 1rem;
