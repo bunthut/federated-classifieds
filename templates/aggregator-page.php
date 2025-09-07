@@ -6,8 +6,27 @@
  */
 
 get_header();
+
+$filter_categories = get_option( 'classyfeds_filter_categories', '' );
+$cats             = array_filter( array_map( 'sanitize_title', array_map( 'trim', explode( ',', $filter_categories ) ) ) );
+$current_cat      = isset( $_GET['classyfeds_cat'] ) ? sanitize_title( wp_unslash( $_GET['classyfeds_cat'] ) ) : '';
 ?>
-<div id="primary" class="content-area">
+<div id="primary" class="content-area classyfeds-aggregator">
+    <?php if ( $cats ) : ?>
+        <nav class="classyfeds-nav">
+            <ul>
+                <li><a href="<?php echo esc_url( remove_query_arg( 'classyfeds_cat' ) ); ?>" class="<?php echo $current_cat ? '' : 'current-cat'; ?>"><?php esc_html_e( 'All', 'classyfeds-aggregator' ); ?></a></li>
+                <?php foreach ( $cats as $slug ) :
+                    $term  = get_term_by( 'slug', $slug, 'listing_category' );
+                    $name  = $term ? $term->name : ucwords( str_replace( '-', ' ', $slug ) );
+                    $link  = add_query_arg( 'classyfeds_cat', $slug );
+                    $class = ( $current_cat === $slug ) ? ' class="current-cat"' : '';
+                    ?>
+                    <li><a href="<?php echo esc_url( $link ); ?>"<?php echo $class; ?>><?php echo esc_html( $name ); ?></a></li>
+                <?php endforeach; ?>
+            </ul>
+        </nav>
+    <?php endif; ?>
     <main id="main" class="site-main classyfeds-listings">
         <div class="classyfeds-logo">
             <img src="<?php echo esc_url( plugin_dir_url( dirname( __DIR__ ) ) . 'images/classyfeds.png' ); ?>" alt="ClassyFeds logo" />
@@ -18,13 +37,23 @@ get_header();
             $post_types[] = 'listing';
         }
 
-        $query = new WP_Query(
-            array(
-                'post_type'      => $post_types,
-                'post_status'    => 'publish',
-                'posts_per_page' => -1,
-            )
+        $args = array(
+            'post_type'      => $post_types,
+            'post_status'    => 'publish',
+            'posts_per_page' => -1,
         );
+
+        if ( $current_cat ) {
+            $args['tax_query'] = array(
+                array(
+                    'taxonomy' => 'listing_category',
+                    'field'    => 'slug',
+                    'terms'    => $current_cat,
+                ),
+            );
+        }
+
+        $query = new WP_Query( $args );
 
         if ( $query->have_posts() ) {
             while ( $query->have_posts() ) {
