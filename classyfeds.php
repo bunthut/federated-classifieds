@@ -611,6 +611,7 @@ function classyfeds_form_shortcode() {
             $cat      = isset( $_POST['listing_category'] ) ? absint( wp_unslash( $_POST['listing_category'] ) ) : 0;
             $price    = isset( $_POST['listing_price'] ) ? sanitize_text_field( wp_unslash( $_POST['listing_price'] ) ) : '';
             $location = isset( $_POST['listing_location'] ) ? sanitize_text_field( wp_unslash( $_POST['listing_location'] ) ) : '';
+            $image_id = 0;
 
             if ( '' === $title || '' === $content || '' === $price || '' === $location ) {
                 $error = true;
@@ -631,6 +632,18 @@ function classyfeds_form_shortcode() {
                     }
                     if ( $type ) {
                         update_post_meta( $post_id, '_listing_type', $type );
+                    }
+                    if ( ! empty( $_FILES['listing_image']['name'] ) ) {
+                        require_once ABSPATH . 'wp-admin/includes/file.php';
+                        require_once ABSPATH . 'wp-admin/includes/media.php';
+                        require_once ABSPATH . 'wp-admin/includes/image.php';
+
+                        $image_id = media_handle_upload( 'listing_image', $post_id );
+                        if ( ! is_wp_error( $image_id ) ) {
+                            set_post_thumbnail( $post_id, $image_id );
+                        } else {
+                            $image_id = 0;
+                        }
                     }
 
                     update_post_meta( $post_id, '_price', $price );
@@ -653,6 +666,9 @@ function classyfeds_form_shortcode() {
                                 'location'    => $location,
                             ],
                         ];
+                        if ( $image_id ) {
+                            $payload['object']['image'] = wp_get_attachment_url( $image_id );
+                        }
                         wp_remote_post(
                             $remote,
                             [
@@ -673,7 +689,23 @@ function classyfeds_form_shortcode() {
 
     wp_enqueue_style( 'classyfeds', plugin_dir_url( __FILE__ ) . 'assets/css/classyfeds.css', [], '0.1.0' );
 
-    $cats = get_terms( [ 'taxonomy' => 'listing_category', 'hide_empty' => false ] );
+    $cat_slugs = get_option( 'classyfeds_filter_categories', '' );
+    if ( $cat_slugs ) {
+        $slug_list = array_filter( array_map( 'trim', explode( ',', $cat_slugs ) ) );
+        if ( $slug_list ) {
+            $cats = get_terms(
+                [
+                    'taxonomy'   => 'listing_category',
+                    'slug'       => $slug_list,
+                    'hide_empty' => false,
+                ]
+            );
+        } else {
+            $cats = get_terms( [ 'taxonomy' => 'listing_category', 'hide_empty' => false ] );
+        }
+    } else {
+        $cats = get_terms( [ 'taxonomy' => 'listing_category', 'hide_empty' => false ] );
+    }
 
     ob_start();
 
@@ -683,13 +715,13 @@ function classyfeds_form_shortcode() {
         echo '<p class="classyfeds-error">' . esc_html__( 'Could not submit listing.', 'classyfeds' ) . '</p>';
     }
 
-    echo '<form method="post" class="classyfeds-form">';
+    echo '<form method="post" class="classyfeds-form" enctype="multipart/form-data">';
     wp_nonce_field( 'classyfeds_new_listing', 'classyfeds_nonce' );
     echo '<p><label for="listing_title">' . esc_html__( 'Title', 'classyfeds' ) . '</label><br />';
-    echo '<input type="text" id="listing_title" name="listing_title" required /></p>';
+    echo '<input type="text" id="listing_title" name="listing_title" placeholder="' . esc_attr__( 'Short title', 'classyfeds' ) . '" required /></p>';
 
     echo '<p><label for="listing_content">' . esc_html__( 'Description', 'classyfeds' ) . '</label><br />';
-    echo '<textarea id="listing_content" name="listing_content" rows="5" required></textarea></p>';
+    echo '<textarea id="listing_content" name="listing_content" rows="5" placeholder="' . esc_attr__( 'Details about the listing', 'classyfeds' ) . '" required></textarea></p>';
 
     echo '<p><label for="listing_type">' . esc_html__( 'Typ', 'classyfeds' ) . '</label><br />';
     echo '<select id="listing_type" name="listing_type">';
@@ -704,8 +736,11 @@ function classyfeds_form_shortcode() {
     }
     echo '</select></p>';
 
+    echo '<p><label for="listing_image">' . esc_html__( 'Image', 'classyfeds' ) . '</label><br />';
+    echo '<input type="file" id="listing_image" name="listing_image" accept="image/*" /></p>';
+
     echo '<p><label for="listing_price">' . esc_html__( 'Price', 'classyfeds' ) . '</label><br />';
-    echo '<input type="number" id="listing_price" name="listing_price" required /></p>';
+    echo '<input type="number" id="listing_price" name="listing_price" step="0.01" placeholder="' . esc_attr__( '0.00', 'classyfeds' ) . '" required /></p>';
 
     echo '<p><label for="listing_location">' . esc_html__( 'Location', 'classyfeds' ) . '</label><br />';
     echo '<input type="text" id="listing_location" name="listing_location" required /></p>';
