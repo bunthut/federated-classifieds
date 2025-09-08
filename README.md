@@ -14,6 +14,7 @@ A minimal WordPress plugin providing a `listing` custom post type, JSON-LD marku
 - Exposes `/wp-json/classyfeds/v1/inbox` (POST) for incoming ActivityPub objects and `/wp-json/classyfeds/v1/listings` (GET) to retrieve them together with local listings.
 - Creates a "Classifieds" page on activation and stores its ID in the `classyfeds_page_id` option.
 - Registers a `publish_listings` capability and settings page to choose which roles can submit listings and whether listings appear in standard post queries.
+- Stores uploaded listing images in a private `classyfeds` directory outside the Media Library.
 
 ## Capabilities
 

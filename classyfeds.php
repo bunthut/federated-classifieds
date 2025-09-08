@@ -614,8 +614,26 @@ function classyfeds_form_shortcode() {
                         require_once ABSPATH . 'wp-admin/includes/media.php';
                         require_once ABSPATH . 'wp-admin/includes/image.php';
 
+                        $upload_filter = function ( $dirs ) {
+                            $subdir        = '/classyfeds';
+                            $dirs['path']  = $dirs['basedir'] . $subdir;
+                            $dirs['url']   = $dirs['baseurl'] . $subdir;
+                            $dirs['subdir'] = $subdir;
+
+                            return $dirs;
+                        };
+
+                        add_filter( 'upload_dir', $upload_filter );
                         $image_id = media_handle_upload( 'listing_image', $post_id );
+                        remove_filter( 'upload_dir', $upload_filter );
+
                         if ( ! is_wp_error( $image_id ) ) {
+                            wp_update_post(
+                                [
+                                    'ID'          => $image_id,
+                                    'post_status' => 'private',
+                                ]
+                            );
                             set_post_thumbnail( $post_id, $image_id );
                         } else {
                             $image_id = 0;
