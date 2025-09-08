@@ -626,9 +626,14 @@ function classyfeds_form_shortcode() {
             $selected_cats = isset( $_POST['listing_category'] ) ? array_filter( array_map( 'absint', (array) wp_unslash( $_POST['listing_category'] ) ) ) : [];
             $price         = isset( $_POST['listing_price'] ) ? sanitize_text_field( wp_unslash( $_POST['listing_price'] ) ) : '';
             $location      = isset( $_POST['listing_location'] ) ? sanitize_text_field( wp_unslash( $_POST['listing_location'] ) ) : '';
+            $delivery      = isset( $_POST['listing_delivery'] ) ? sanitize_text_field( wp_unslash( $_POST['listing_delivery'] ) ) : '';
+            $allowed_deliveries = [ 'Abholung', 'Versand' ];
+            if ( ! in_array( $delivery, $allowed_deliveries, true ) ) {
+                $delivery = '';
+            }
             $image_id      = 0;
 
-            if ( '' === $title || '' === $content || '' === $price || '' === $location || empty( $selected_cats ) ) {
+            if ( '' === $title || '' === $content || '' === $price || '' === $location || '' === $delivery || empty( $selected_cats ) ) {
                 $error = true;
             } else {
                 $post_id = wp_insert_post(
@@ -663,6 +668,7 @@ function classyfeds_form_shortcode() {
 
                     update_post_meta( $post_id, '_price', $price );
                     update_post_meta( $post_id, '_location', $location );
+                    update_post_meta( $post_id, '_delivery_method', $delivery );
 
                     $remote = get_option( 'classyfeds_remote_inbox' );
                     if ( $remote ) {
@@ -678,7 +684,8 @@ function classyfeds_form_shortcode() {
                                 'category'    => array_values( wp_get_post_terms( $post_id, 'listing_category', [ 'fields' => 'names' ] ) ),
                                 'listingType' => $type,
                                 'price'       => $price,
-                                'location'    => $location,
+                                'location'       => $location,
+                                'deliveryMethod' => $delivery,
                             ],
                         ];
                         if ( $image_id ) {
@@ -802,10 +809,15 @@ function classyfeds_form_shortcode() {
     // Location
     echo '<div class="wp-block"><label for="listing_location">' . esc_html__( 'Location', 'classyfeds' ) . '</label>';
     echo '<input type="text" id="listing_location" name="listing_location" class="regular-text" required /></div>';
+    // Delivery method
+    echo '<div class="wp-block"><label for="listing_delivery">' . esc_html__( 'Delivery', 'classyfeds' ) . '</label>';
+    echo '<select id="listing_delivery" name="listing_delivery" class="regular-text" required>';
+    echo '<option value="Abholung">' . esc_html__( 'Abholung', 'classyfeds' ) . '</option>';
+    echo '<option value="Versand">' . esc_html__( 'Versand', 'classyfeds' ) . '</option>';
+    echo '</select></div>';
 
     // Submit
-    echo '<p><input type="submit" name="classyfeds_submit" class="button button-primary" value="' . esc_attr__( 'Submit', 'classyfeds' ) . '" /></p>';
-
+    echo '<div class="wp-block"><input type="submit" name="classyfeds_submit" class="button button-primary" value="' . esc_attr__( 'Submit', 'classyfeds' ) . '" /></div>';
 
     echo '</form>';
 
