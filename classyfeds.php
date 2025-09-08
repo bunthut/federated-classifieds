@@ -25,6 +25,7 @@ add_action( 'init', function() {
         'supports'     => [ 'title', 'editor', 'thumbnail' ],
         'taxonomies'   => [ 'listing_category', 'post_tag' ],
         'rewrite'      => [ 'slug' => 'listings' ],
+        'register_meta_box_cb' => 'classyfeds_register_listing_metaboxes',
     ] );
 
     register_taxonomy(
@@ -39,9 +40,39 @@ add_action( 'init', function() {
             'show_ui'      => true,
             'show_in_rest' => true,
             'hierarchical' => true,
+            'capabilities' => [
+                'manage_terms' => 'manage_listing_categories',
+                'edit_terms'   => 'manage_listing_categories',
+                'delete_terms' => 'manage_listing_categories',
+                'assign_terms' => 'publish_listings',
+            ],
         ]
     );
 } );
+
+/**
+ * Register custom meta boxes for the listing post type.
+ */
+function classyfeds_register_listing_metaboxes() {
+    remove_meta_box( 'listing_categorydiv', 'listing', 'side' );
+
+    add_meta_box(
+        'classyfeds_listing_categorydiv',
+        __( 'Listing Categories', 'classyfeds' ),
+        'classyfeds_listing_category_meta_box',
+        'listing',
+        'side'
+    );
+}
+
+/**
+ * Output the category checklist without term management options.
+ *
+ * @param WP_Post $post The current post object.
+ */
+function classyfeds_listing_category_meta_box( $post ) {
+    wp_terms_checklist( $post->ID, [ 'taxonomy' => 'listing_category' ] );
+}
 
 /**
  * Add "Typ" dropdown to the listing editor.
@@ -239,7 +270,13 @@ function classyfeds_activate() {
         $role = get_role( $role_name );
         if ( $role ) {
             $role->add_cap( 'publish_listings' );
+            $role->remove_cap( 'manage_listing_categories' );
         }
+    }
+
+    $admin = get_role( 'administrator' );
+    if ( $admin ) {
+        $admin->add_cap( 'manage_listing_categories' );
     }
 
     // Flush rewrite rules.
@@ -288,8 +325,10 @@ function classyfeds_settings_page() {
             }
             if ( in_array( $role_key, $selected, true ) ) {
                 $role->add_cap( 'publish_listings' );
+                $role->remove_cap( 'manage_listing_categories' );
             } else {
                 $role->remove_cap( 'publish_listings' );
+                $role->remove_cap( 'manage_listing_categories' );
             }
         }
         $message = __( 'Settings saved.', 'classyfeds' );
@@ -770,7 +809,6 @@ function classyfeds_form_shortcode() {
     // Location
     echo '<div class="wp-block"><label for="listing_location">' . esc_html__( 'Location', 'classyfeds' ) . '</label>';
     echo '<input type="text" id="listing_location" name="listing_location" class="regular-text" required /></div>';
-
     // Delivery method
     echo '<div class="wp-block"><label for="listing_delivery">' . esc_html__( 'Delivery', 'classyfeds' ) . '</label>';
     echo '<select id="listing_delivery" name="listing_delivery" class="regular-text" required>';
@@ -780,6 +818,7 @@ function classyfeds_form_shortcode() {
 
     // Submit
     echo '<div class="wp-block"><input type="submit" name="classyfeds_submit" class="button button-primary" value="' . esc_attr__( 'Submit', 'classyfeds' ) . '" /></div>';
+
     echo '</form>';
 
     return ob_get_clean();

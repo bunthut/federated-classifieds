@@ -230,11 +230,22 @@ function classyfeds_aggregator_get_listings_html() {
     if ( $query->have_posts() ) {
         while ( $query->have_posts() ) {
             $query->the_post();
+            $data = ( 'ap_object' === get_post_type() ) ? json_decode( get_the_content(), true ) : [];
+            $link = '';
+            if ( $data ) {
+                if ( isset( $data['url'] ) ) {
+                    $link = $data['url'];
+                } elseif ( isset( $data['id'] ) ) {
+                    $link = $data['id'];
+                }
+            }
             ?>
             <article id="post-<?php the_ID(); ?>" <?php post_class( 'classyfeds-listing' ); ?>>
                 <header class="entry-header">
                     <?php if ( 'listing' === get_post_type() ) : ?>
                         <h2 class="entry-title"><a href="<?php the_permalink(); ?>"><?php the_title(); ?></a></h2>
+                    <?php elseif ( $link ) : ?>
+                        <h2 class="entry-title"><a href="<?php echo esc_url( $link ); ?>" target="_blank" rel="nofollow noopener"><?php the_title(); ?></a></h2>
                     <?php else : ?>
                         <h2 class="entry-title"><?php the_title(); ?></h2>
                     <?php endif; ?>
@@ -244,7 +255,6 @@ function classyfeds_aggregator_get_listings_html() {
                     if ( 'listing' === get_post_type() ) {
                         the_excerpt();
                     } else {
-                        $data = json_decode( get_the_content(), true );
                         if ( isset( $data['content'] ) ) {
                             echo wp_kses_post( wpautop( $data['content'] ) );
                         } elseif ( isset( $data['summary'] ) ) {
