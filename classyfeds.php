@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Classyfeds (MVP)
  * Description: Custom post type "listing" with JSON-LD output and auto-expiration for a federated classifieds network.
- * Version: 0.1.2
+ * Version: 0.1.3
  * Author: thomi@etik.com + amis
  */
 
@@ -40,6 +40,20 @@ add_action( 'init', function() {
             'hierarchical' => true,
         ]
     );
+} );
+
+/**
+ * Exclude listings from main queries unless enabled in settings.
+ */
+add_action( 'pre_get_posts', function( $query ) {
+    if ( ! is_admin() && $query->is_main_query() && ! get_option( 'classyfeds_show_in_posts', false ) && ( $query->is_home() || $query->is_archive() || $query->is_search() ) ) {
+        $post_types = $query->get( 'post_type' );
+        if ( empty( $post_types ) || 'any' === $post_types ) {
+            $post_types = get_post_types( [ 'public' => true ] );
+        }
+        $post_types = array_diff( (array) $post_types, [ 'listing' ] );
+        $query->set( 'post_type', $post_types );
+    }
 } );
 
 
@@ -152,6 +166,7 @@ add_action( 'plugins_loaded', 'classyfeds_migrate_options' );
  * daily expiration event.
  */
 function classyfeds_activate() {
+    add_option( 'classyfeds_show_in_posts', false );
     $page_id = (int) get_option( 'classyfeds_page_id' );
 
     if ( $page_id && get_post( $page_id ) ) {
@@ -289,11 +304,14 @@ function classyfeds_settings_page() {
 
     $editable_roles = get_editable_roles();
     $selected       = (array) get_option( 'classyfeds_publish_roles', [] );
+    $show_in_posts  = (bool) get_option( 'classyfeds_show_in_posts', false );
     $message        = '';
 
     if ( isset( $_POST['classyfeds_save'] ) && check_admin_referer( 'classyfeds_save_settings', 'classyfeds_nonce' ) ) {
-        $selected = isset( $_POST['publish_roles'] ) ? array_map( 'sanitize_text_field', (array) wp_unslash( $_POST['publish_roles'] ) ) : [];
+        $selected      = isset( $_POST['publish_roles'] ) ? array_map( 'sanitize_text_field', (array) wp_unslash( $_POST['publish_roles'] ) ) : [];
+        $show_in_posts = isset( $_POST['show_in_posts'] );
         update_option( 'classyfeds_publish_roles', $selected );
+        update_option( 'classyfeds_show_in_posts', $show_in_posts );
 
         foreach ( $editable_roles as $role_key => $details ) {
             $role = get_role( $role_key );
@@ -324,6 +342,9 @@ function classyfeds_settings_page() {
     foreach ( $editable_roles as $role_key => $details ) {
         echo '<label><input type="checkbox" name="publish_roles[]" value="' . esc_attr( $role_key ) . '" ' . checked( in_array( $role_key, $selected, true ), true, false ) . ' /> ' . esc_html( $details['name'] ) . '</label><br />';
     }
+    echo '</td></tr>';
+    echo '<tr><th scope="row">' . esc_html__( 'Show listings in posts', 'classyfeds' ) . '</th><td>';
+    echo '<label><input type="checkbox" name="show_in_posts" value="1" ' . checked( $show_in_posts, true, false ) . ' /> ' . esc_html__( 'Include listing posts on home, archive, and search pages', 'classyfeds' ) . '</label>';
     echo '</td></tr>';
     echo '</table>';
 

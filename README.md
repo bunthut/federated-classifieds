@@ -13,7 +13,7 @@ A minimal WordPress plugin providing a `listing` custom post type, JSON-LD marku
 - Automatically creates a "Submit Listing" page with the shortcode, including required price and location fields.
 - Exposes `/wp-json/classyfeds/v1/inbox` (POST) for incoming ActivityPub objects and `/wp-json/classyfeds/v1/listings` (GET) to retrieve them together with local listings.
 - Creates a "Classifieds" page on activation and stores its ID in the `classyfeds_page_id` option.
-- Registers a `publish_listings` capability and settings page to choose which roles can submit listings.
+- Registers a `publish_listings` capability and settings page to choose which roles can submit listings and whether listings appear in standard post queries.
 
 ## Capabilities
 
