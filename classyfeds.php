@@ -739,9 +739,11 @@ if ( isset( $_POST['classyfeds_submit'] ) ) {
                     );
                 }
 
-                $success
-
+                $success = true;
+            }
+        }
     }
+}
 
     $submission = WPCF7_Submission::get_instance();
     if ( ! $submission ) {
