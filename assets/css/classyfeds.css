@@ -49,3 +49,45 @@
     height: auto;
     display: block;
 }
+
+/* Form styles */
+.classyfeds-form .wp-block {
+    margin-bottom: 1rem;
+}
+
+.classyfeds-form label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+}
+
+.classyfeds-form input[type="text"],
+.classyfeds-form input[type="number"],
+.classyfeds-form input[type="file"],
+.classyfeds-form select,
+.classyfeds-form textarea {
+    width: 100%;
+    max-width: 100%;
+    padding: 0.5rem;
+    border: 1px solid #7e8993;
+    border-radius: 4px;
+    box-sizing: border-box;
+}
+
+.classyfeds-form .wp-editor-wrap {
+    max-width: 100%;
+}
+
+.classyfeds-form .button-primary {
+    background: #2271b1;
+    border: none;
+    color: #fff;
+    padding: 0.5rem 1rem;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.classyfeds-form .button-primary:hover {
+    background: #135e96;
+}
+
