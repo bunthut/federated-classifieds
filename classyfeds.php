@@ -36,6 +36,7 @@ add_action( 'init', function() {
                 'singular_name' => __( 'Listing Category', 'classyfeds' ),
             ],
             'public'       => true,
+            'show_ui'      => true,
             'show_in_rest' => true,
             'hierarchical' => true,
         ]
@@ -608,7 +609,7 @@ function classyfeds_form_shortcode() {
             $title    = isset( $_POST['listing_title'] ) ? sanitize_text_field( wp_unslash( $_POST['listing_title'] ) ) : '';
             $content  = isset( $_POST['listing_content'] ) ? wp_kses_post( wp_unslash( $_POST['listing_content'] ) ) : '';
             $type     = isset( $_POST['listing_type'] ) ? sanitize_text_field( wp_unslash( $_POST['listing_type'] ) ) : '';
-            $cat      = isset( $_POST['listing_category'] ) ? absint( wp_unslash( $_POST['listing_category'] ) ) : 0;
+            $cat_ids  = isset( $_POST['listing_category'] ) ? array_filter( array_map( 'absint', (array) wp_unslash( $_POST['listing_category'] ) ) ) : [];
             $price    = isset( $_POST['listing_price'] ) ? sanitize_text_field( wp_unslash( $_POST['listing_price'] ) ) : '';
             $location = isset( $_POST['listing_location'] ) ? sanitize_text_field( wp_unslash( $_POST['listing_location'] ) ) : '';
             $image_id = 0;
@@ -627,8 +628,8 @@ function classyfeds_form_shortcode() {
                 );
 
                 if ( ! is_wp_error( $post_id ) ) {
-                    if ( $cat ) {
-                        wp_set_post_terms( $post_id, [ $cat ], 'listing_category' );
+                    if ( $cat_ids ) {
+                        wp_set_post_terms( $post_id, $cat_ids, 'listing_category' );
                     }
                     if ( $type ) {
                         update_post_meta( $post_id, '_listing_type', $type );
@@ -689,22 +690,23 @@ function classyfeds_form_shortcode() {
 
     wp_enqueue_style( 'classyfeds', plugin_dir_url( __FILE__ ) . 'assets/css/classyfeds.css', [], '0.1.0' );
 
-    $cat_slugs = get_option( 'classyfeds_filter_categories', '' );
+    $cat_slugs   = get_option( 'classyfeds_filter_categories', '' );
+    $include_ids = [];
     if ( $cat_slugs ) {
         $slug_list = array_filter( array_map( 'trim', explode( ',', $cat_slugs ) ) );
         if ( $slug_list ) {
-            $cats = get_terms(
+            $include_ids = get_terms(
                 [
                     'taxonomy'   => 'listing_category',
                     'slug'       => $slug_list,
                     'hide_empty' => false,
+                    'fields'     => 'ids',
                 ]
             );
-        } else {
-            $cats = get_terms( [ 'taxonomy' => 'listing_category', 'hide_empty' => false ] );
+            if ( is_wp_error( $include_ids ) ) {
+                $include_ids = [];
+            }
         }
-    } else {
-        $cats = get_terms( [ 'taxonomy' => 'listing_category', 'hide_empty' => false ] );
     }
 
     ob_start();
@@ -730,11 +732,19 @@ function classyfeds_form_shortcode() {
     echo '</select></p>';
 
     echo '<p><label for="listing_category">' . esc_html__( 'Category', 'classyfeds' ) . '</label><br />';
-    echo '<select id="listing_category" name="listing_category">';
-    foreach ( $cats as $cat ) {
-        echo '<option value="' . esc_attr( $cat->term_id ) . '">' . esc_html( $cat->name ) . '</option>';
+    $dropdown_args = [
+        'taxonomy'         => 'listing_category',
+        'hide_empty'       => false,
+        'show_option_none' => false,
+        'multiple'         => true,
+        'name'             => 'listing_category[]',
+        'id'               => 'listing_category',
+    ];
+    if ( $include_ids ) {
+        $dropdown_args['include'] = $include_ids;
     }
-    echo '</select></p>';
+    wp_dropdown_categories( $dropdown_args );
+    echo '</p>';
 
     echo '<p><label for="listing_image">' . esc_html__( 'Image', 'classyfeds' ) . '</label><br />';
     echo '<input type="file" id="listing_image" name="listing_image" accept="image/*" /></p>';
