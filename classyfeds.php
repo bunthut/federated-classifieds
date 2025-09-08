@@ -332,4 +332,417 @@ add_action( 'classyfeds_expire_event', function() {
     $posts = get_posts( [
         'post_type'    => 'listing',
         'post_status'  => 'publish',
-        'meta_key'     => '_expires_at_
+        'meta_key'     => '_expires_at',
+        'meta_value'   => $now,
+        'meta_compare' => '<=',
+        'fields'       => 'ids',
+        'numberposts'  => -1,
+    ] );
+
+    foreach ( $posts as $id ) {
+        wp_update_post( [ 'ID' => $id, 'post_status' => 'expired' ] );
+    }
+} );
+
+/**
+ * Output JSON-LD structured data for listings.
+ */
+add_action( 'wp_head', function() {
+    if ( ! is_singular( 'listing' ) ) {
+        return;
+    }
+
+    $post    = get_queried_object();
+    $price   = get_post_meta( $post->ID, '_price', true );
+    $expires = get_post_meta( $post->ID, '_expires_at', true );
+    $image   = get_the_post_thumbnail_url( $post->ID, 'full' );
+
+    $data = [
+        '@context'    => 'https://schema.org/',
+        '@type'       => 'Offer',
+        'name'        => get_the_title( $post ),
+        'description' => wp_strip_all_tags( get_the_excerpt( $post ) ),
+        'url'         => get_permalink( $post ),
+    ];
+
+    if ( $image ) {
+        $data['image'] = $image;
+    }
+    if ( $price ) {
+        $data['price'] = $price;
+    }
+    if ( $expires ) {
+        $data['expires'] = gmdate( 'c', (int) $expires );
+    }
+
+    echo '<script type="application/ld+json">' . wp_json_encode( $data ) . '</script>' . "\n";
+} );
+
+/**
+ * Load template for the Classifieds page.
+ */
+add_filter( 'template_include', function( $template ) {
+    $page_id = (int) get_option( 'classyfeds_page_id' );
+    if ( $page_id && is_page( $page_id ) ) {
+        $new_template = plugin_dir_path( __FILE__ ) . 'templates/listings-page.php';
+        if ( file_exists( $new_template ) ) {
+            return $new_template;
+        }
+    }
+    return $template;
+} );
+
+/**
+ * Enqueue frontend assets for the Classifieds page.
+ */
+add_action( 'wp_enqueue_scripts', function() {
+    $page_id = (int) get_option( 'classyfeds_page_id' );
+    if ( $page_id && is_page( $page_id ) ) {
+        wp_enqueue_style( 'classyfeds', plugin_dir_url( __FILE__ ) . 'assets/css/classyfeds.css', [], '0.1.0' );
+        wp_enqueue_script( 'classyfeds', plugin_dir_url( __FILE__ ) . 'assets/js/classyfeds.js', [ 'jquery' ], '0.1.0', true );
+    }
+} );
+
+/**
+ * Register ActivityPub REST endpoints.
+ */
+add_action( 'rest_api_init', function() {
+    register_rest_route(
+        'classyfeds/v1',
+        '/inbox',
+        [
+            'methods'             => WP_REST_Server::CREATABLE,
+            'callback'            => 'classyfeds_inbox_handler',
+            'permission_callback' => '__return_true',
+        ]
+    );
+
+    register_rest_route(
+        'classyfeds/v1',
+        '/listings',
+        [
+            'methods'             => WP_REST_Server::READABLE,
+            'callback'            => 'classyfeds_listings_handler',
+            'permission_callback' => '__return_true',
+        ]
+    );
+} );
+
+/**
+ * Handle incoming ActivityPub objects and store them as "ap_object" posts.
+ *
+ * Supports bare objects as well as "Create" activities wrapping an object.
+ *
+ * @param WP_REST_Request $request Request object.
+ * @return WP_REST_Response Response.
+ */
+function classyfeds_inbox_handler( WP_REST_Request $request ) {
+    $activity = $request->get_json_params();
+
+    if ( empty( $activity ) || ! is_array( $activity ) ) {
+        return new WP_REST_Response( [ 'error' => 'Invalid object' ], 400 );
+    }
+
+    $object = $activity;
+    if ( isset( $activity['type'] ) && 'Create' === $activity['type'] && ! empty( $activity['object'] ) ) {
+        $object = $activity['object'];
+    }
+
+    $title = '';
+    if ( isset( $object['name'] ) ) {
+        $title = sanitize_text_field( $object['name'] );
+    } elseif ( isset( $object['summary'] ) ) {
+        $title = sanitize_text_field( $object['summary'] );
+    } else {
+        $title = __( 'Remote ActivityPub Object', 'classyfeds' );
+    }
+
+    $post_id = wp_insert_post(
+        [
+            'post_type'    => 'ap_object',
+            'post_status'  => 'publish',
+            'post_title'   => $title,
+            'post_content' => wp_json_encode( $object ),
+        ],
+        true
+    );
+
+    if ( is_wp_error( $post_id ) ) {
+        return new WP_REST_Response( [ 'error' => 'Could not store object' ], 500 );
+    }
+
+    return new WP_REST_Response( [ 'stored' => $post_id ], 202 );
+}
+
+/**
+ * Retrieve listings and ActivityPub objects as an ActivityStreams collection.
+ *
+ * @param WP_REST_Request $request Request object.
+ * @return WP_REST_Response Response.
+ */
+function classyfeds_listings_handler( WP_REST_Request $request ) {
+    $query = new WP_Query(
+        [
+            'post_type'      => [ 'listing', 'ap_object' ],
+            'post_status'    => 'publish',
+            'posts_per_page' => -1,
+        ]
+    );
+
+    $items = [];
+
+    foreach ( $query->posts as $post ) {
+        if ( 'ap_object' === $post->post_type ) {
+            $data = json_decode( $post->post_content, true );
+            if ( is_array( $data ) ) {
+                $data['@context'] = [
+                    'https://www.w3.org/ns/activitystreams',
+                    [
+                        'price'    => 'https://schema.org/price',
+                        'location' => 'https://schema.org/location',
+                        'category' => 'https://schema.org/category',
+                    ],
+                ];
+                $data['to'] = $data['to'] ?? 'https://www.w3.org/ns/activitystreams#Public';
+                $data['cc'] = $data['cc'] ?? 'https://www.w3.org/ns/activitystreams#Public';
+
+                if ( empty( $data['price'] ) || empty( $data['location'] ) || empty( $data['category'] ) ) {
+                    continue;
+                }
+
+                $items[] = $data;
+                continue;
+            }
+        }
+
+        $cats     = wp_get_post_terms( $post->ID, 'listing_category', [ 'fields' => 'names' ] );
+        $price    = get_post_meta( $post->ID, '_price', true );
+        $location = get_post_meta( $post->ID, '_location', true );
+
+        if ( empty( $price ) || empty( $location ) || empty( $cats ) ) {
+            continue;
+        }
+
+        $items[] = [
+            '@context'     => [
+                'https://www.w3.org/ns/activitystreams',
+                [
+                    'price'    => 'https://schema.org/price',
+                    'location' => 'https://schema.org/location',
+                    'category' => 'https://schema.org/category',
+                ],
+            ],
+            'id'           => get_permalink( $post ),
+            'type'         => 'Note',
+            'name'         => get_the_title( $post ),
+            'content'      => apply_filters( 'the_content', $post->post_content ),
+            'url'          => get_permalink( $post ),
+            'published'    => mysql2date( 'c', $post->post_date_gmt, false ),
+            'attributedTo' => home_url(),
+            'to'           => 'https://www.w3.org/ns/activitystreams#Public',
+            'cc'           => 'https://www.w3.org/ns/activitystreams#Public',
+            'price'        => $price,
+            'location'     => $location,
+            'category'     => $cats,
+            'listingType'  => get_post_meta( $post->ID, '_listing_type', true ),
+        ];
+    }
+
+    $collection = [
+        '@context'     => 'https://www.w3.org/ns/activitystreams',
+        'id'           => rest_url( 'classyfeds/v1/listings' ),
+        'type'         => 'OrderedCollection',
+        'totalItems'   => count( $items ),
+        'orderedItems' => $items,
+    ];
+
+    return new WP_REST_Response( $collection );
+}
+
+add_shortcode( 'classyfeds_form', 'classyfeds_form_shortcode' );
+add_shortcode( 'fed_classifieds_form', 'classyfeds_form_shortcode' ); // Back-compat
+
+/**
+ * Shortcode handler for `[classyfeds_form]`.
+ */
+function classyfeds_form_shortcode() {
+    if ( ! is_user_logged_in() ) {
+        return '<p><a href="' . esc_url( wp_login_url( get_permalink() ) ) . '">' . esc_html__( 'Log in to submit a listing.', 'classyfeds' ) . '</a></p>';
+    }
+
+    if ( ! current_user_can( 'publish_listings' ) ) {
+        return '<p>' . esc_html__( 'You do not have permission to submit listings.', 'classyfeds' ) . '</p>';
+    }
+
+    $success = false;
+    $error   = false;
+
+    if ( isset( $_POST['classyfeds_submit'] ) ) {
+        if ( ! isset( $_POST['classyfeds_nonce'] ) || ! wp_verify_nonce( $_POST['classyfeds_nonce'], 'classyfeds_new_listing' ) ) {
+            $error = true;
+        } else {
+            $title         = isset( $_POST['listing_title'] ) ? sanitize_text_field( wp_unslash( $_POST['listing_title'] ) ) : '';
+            $content       = isset( $_POST['listing_content'] ) ? wp_kses_post( wp_unslash( $_POST['listing_content'] ) ) : '';
+            $type          = isset( $_POST['listing_type'] ) ? sanitize_text_field( wp_unslash( $_POST['listing_type'] ) ) : '';
+            $selected_cats = isset( $_POST['listing_category'] ) ? array_filter( array_map( 'absint', (array) wp_unslash( $_POST['listing_category'] ) ) ) : [];
+            $price         = isset( $_POST['listing_price'] ) ? sanitize_text_field( wp_unslash( $_POST['listing_price'] ) ) : '';
+            $location      = isset( $_POST['listing_location'] ) ? sanitize_text_field( wp_unslash( $_POST['listing_location'] ) ) : '';
+            $image_id      = 0;
+
+            if ( '' === $title || '' === $content || '' === $price || '' === $location || empty( $selected_cats ) ) {
+                $error = true;
+            } else {
+                $post_id = wp_insert_post(
+                    [
+                        'post_type'    => 'listing',
+                        'post_status'  => 'publish',
+                        'post_title'   => $title,
+                        'post_content' => $content,
+                    ],
+                    true
+                );
+
+                if ( ! is_wp_error( $post_id ) ) {
+                    if ( $selected_cats ) {
+                        wp_set_post_terms( $post_id, $selected_cats, 'listing_category' );
+                    }
+                    if ( $type ) {
+                        update_post_meta( $post_id, '_listing_type', $type );
+                    }
+                    if ( ! empty( $_FILES['listing_image']['name'] ) ) {
+                        require_once ABSPATH . 'wp-admin/includes/file.php';
+                        require_once ABSPATH . 'wp-admin/includes/media.php';
+                        require_once ABSPATH . 'wp-admin/includes/image.php';
+
+                        $image_id = media_handle_upload( 'listing_image', $post_id );
+                        if ( ! is_wp_error( $image_id ) ) {
+                            set_post_thumbnail( $post_id, $image_id );
+                        } else {
+                            $image_id = 0;
+                        }
+                    }
+
+                    update_post_meta( $post_id, '_price', $price );
+                    update_post_meta( $post_id, '_location', $location );
+
+                    $remote = get_option( 'classyfeds_remote_inbox' );
+                    if ( $remote ) {
+                        $payload = [
+                            '@context' => 'https://www.w3.org/ns/activitystreams',
+                            'type'     => 'Create',
+                            'actor'    => home_url(),
+                            'object'   => [
+                                'type'        => 'Note',
+                                'name'        => $title,
+                                'content'     => $content,
+                                'url'         => get_permalink( $post_id ),
+                                'category'    => array_values( wp_get_post_terms( $post_id, 'listing_category', [ 'fields' => 'names' ] ) ),
+                                'listingType' => $type,
+                                'price'       => $price,
+                                'location'    => $location,
+                            ],
+                        ];
+                        if ( $image_id ) {
+                            $payload['object']['image'] = wp_get_attachment_url( $image_id );
+                        }
+                        wp_remote_post(
+                            $remote,
+                            [
+                                'headers' => [ 'Content-Type' => 'application/activity+json' ],
+                                'body'    => wp_json_encode( $payload ),
+                                'timeout' => 15,
+                            ]
+                        );
+                    }
+
+                    $success = true;
+                } else {
+                    $error = true;
+                }
+            }
+        }
+    }
+
+    wp_enqueue_style( 'classyfeds', plugin_dir_url( __FILE__ ) . 'assets/css/classyfeds.css', [], '0.1.0' );
+
+    // Optional: restrict categories by slug list in settings.
+    $cat_slugs   = get_option( 'classyfeds_filter_categories', '' );
+    $include_ids = [];
+    if ( $cat_slugs ) {
+        $slug_list = array_filter( array_map( 'trim', explode( ',', $cat_slugs ) ) );
+        if ( $slug_list ) {
+            $include_ids = get_terms(
+                [
+                    'taxonomy'   => 'listing_category',
+                    'slug'       => $slug_list,
+                    'hide_empty' => false,
+                    'fields'     => 'ids',
+                ]
+            );
+            if ( is_wp_error( $include_ids ) ) {
+                $include_ids = [];
+            }
+        }
+    }
+
+    // Build a multi-select dropdown for listing_category (wp_dropdown_categories hack).
+    $dropdown_args = [
+        'taxonomy'         => 'listing_category',
+        'hide_empty'       => false,
+        'show_option_none' => false,
+        'name'             => 'listing_category', // will be converted to [] below
+        'id'               => 'listing_category',
+        'echo'             => 0,
+    ];
+    if ( $include_ids ) {
+        $dropdown_args['include'] = $include_ids;
+    }
+    $dropdown_html = wp_dropdown_categories( $dropdown_args );
+    // Convert to <select multiple name="listing_category[]"> and add required.
+    $dropdown_html = preg_replace(
+        '/<select([^>]*)name="listing_category"([^>]*)>/i',
+        '<select$1name="listing_category[]"$2 multiple="multiple" required>',
+        $dropdown_html
+    );
+
+    ob_start();
+
+    if ( $success ) {
+        echo '<p class="classyfeds-success">' . esc_html__( 'Listing submitted.', 'classyfeds' ) . '</p>';
+    } elseif ( $error ) {
+        echo '<p class="classyfeds-error">' . esc_html__( 'Could not submit listing.', 'classyfeds' ) . '</p>';
+    }
+
+    echo '<form method="post" class="classyfeds-form" enctype="multipart/form-data">';
+    wp_nonce_field( 'classyfeds_new_listing', 'classyfeds_nonce' );
+
+    echo '<p><label for="listing_title">' . esc_html__( 'Title', 'classyfeds' ) . '</label><br />';
+    echo '<input type="text" id="listing_title" name="listing_title" placeholder="' . esc_attr__( 'Short title', 'classyfeds' ) . '" required /></p>';
+
+    echo '<p><label for="listing_content">' . esc_html__( 'Description', 'classyfeds' ) . '</label><br />';
+    echo '<textarea id="listing_content" name="listing_content" rows="5" placeholder="' . esc_attr__( 'Details about the listing', 'classyfeds' ) . '" required></textarea></p>';
+
+    echo '<p><label for="listing_type">' . esc_html__( 'Typ', 'classyfeds' ) . '</label><br />';
+    echo '<select id="listing_type" name="listing_type">';
+    echo '<option value="Angebot">' . esc_html__( 'Angebot', 'classyfeds' ) . '</option>';
+    echo '<option value="Gesuch">' . esc_html__( 'Gesuch', 'classyfeds' ) . '</option>';
+    echo '</select></p>';
+
+    echo '<p><label for="listing_category">' . esc_html__( 'Category', 'classyfeds' ) . '</label><br />';
+    echo $dropdown_html;
+    echo '</p>';
+
+    echo '<p><label for="listing_image">' . esc_html__( 'Image', 'classyfeds' ) . '</label><br />';
+    echo '<input type="file" id="listing_image" name="listing_image" accept="image/*" /></p>';
+
+    echo '<p><label for="listing_price">' . esc_html__( 'Price', 'classyfeds' ) . '</label><br />';
+    echo '<input type="number" id="listing_price" name="listing_price" step="0.01" placeholder="' . esc_attr__( '0.00', 'classyfeds' ) . '" required /></p>';
+
+    echo '<p><label for="listing_location">' . esc_html__( 'Location', 'classyfeds' ) . '</label><br />';
+    echo '<input type="text" id="listing_location" name="listing_location" required /></p>';
+
+    echo '<p><input type="submit" name="classyfeds_submit" value="' . esc_attr__( 'Submit', 'classyfeds' ) . '" /></p>';
+    echo '</form>';
+
+    return ob_get_clean();
+}
