@@ -1,6 +1,6 @@
 # Classyfeds
 
-A minimal WordPress plugin providing a `listing` custom post type, JSON-LD markup, automatic expiration, and a frontend form that can forward listings to an ActivityPub inbox. On activation it also creates a Classifieds page and a submission page with required price and location fields.
+A minimal WordPress plugin providing a `listing` custom post type, JSON-LD markup, automatic expiration, and a frontend form powered by Contact Form 7 that can forward listings to an ActivityPub inbox. On activation it also creates a Classifieds page and a submission page with required price and shipping fields.
 
 ## Features
 
@@ -8,16 +8,16 @@ A minimal WordPress plugin providing a `listing` custom post type, JSON-LD marku
 - Adds default expiration 60 days after publish and moves listings to an `expired` status via daily cron.
 - Outputs [schema.org](https://schema.org) Offer data as JSON-LD for each listing.
 - Intended to work alongside companion plugins such as [ActivityPub](https://wordpress.org/plugins/activitypub/) and [WebSub](https://wordpress.org/plugins/websub-publisher/).
-- Provides a `[classyfeds_form]` shortcode for frontend submissions that can forward listings to a configurable ActivityPub inbox.
+- Integrates with Contact Form 7 for frontend submissions that can forward listings to a configurable ActivityPub inbox.
 - Creates default categories common to classifieds sites for convenience.
-- Automatically creates a "Submit Listing" page with the shortcode, including required price and location fields.
+- Automatically creates a "Submit Listing" page with the contact form, including required price and shipping fields.
 - Exposes `/wp-json/classyfeds/v1/inbox` (POST) for incoming ActivityPub objects and `/wp-json/classyfeds/v1/listings` (GET) to retrieve them together with local listings.
 - Creates a "Classifieds" page on activation and stores its ID in the `classyfeds_page_id` option.
 - Registers a `publish_listings` capability and settings page to choose which roles can submit listings and whether listings appear in standard post queries.
 
 ## Capabilities
 
-On activation, the plugin creates a `publish_listings` capability and grants it to the built-in Author role as well as a new "Listing Contributor" role. Only users with this capability can submit listings via the `[classyfeds_form]` shortcode. Administrators may assign or revoke this capability for other roles under **Settings → Classifieds**.
+On activation, the plugin creates a `publish_listings` capability and grants it to the built-in Author role as well as a new "Listing Contributor" role. Only users with this capability can submit listings via the submission form. Administrators may assign or revoke this capability for other roles under **Settings → Classifieds**.
 
 ## Build
 
