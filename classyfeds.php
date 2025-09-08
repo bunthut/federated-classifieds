@@ -715,33 +715,69 @@ function classyfeds_form_shortcode() {
 
     echo '<form method="post" class="classyfeds-form" enctype="multipart/form-data">';
     wp_nonce_field( 'classyfeds_new_listing', 'classyfeds_nonce' );
+    // === Gutenberg-friendly form fields ===
 
-    echo '<p><label for="listing_title">' . esc_html__( 'Title', 'classyfeds' ) . '</label><br />';
-    echo '<input type="text" id="listing_title" name="listing_title" placeholder="' . esc_attr__( 'Short title', 'classyfeds' ) . '" required /></p>';
+    // Title
+    echo '<div class="wp-block"><label for="listing_title">' . esc_html__( 'Title', 'classyfeds' ) . '</label>';
+    echo '<input type="text" id="listing_title" name="listing_title" class="regular-text" placeholder="' . esc_attr__( 'Short title', 'classyfeds' ) . '" required /></div>';
 
-    echo '<p><label for="listing_content">' . esc_html__( 'Description', 'classyfeds' ) . '</label><br />';
-    echo '<textarea id="listing_content" name="listing_content" rows="5" placeholder="' . esc_attr__( 'Details about the listing', 'classyfeds' ) . '" required></textarea></p>';
+    // Description using wp_editor (adds TinyMCE/Block styling in classic contexts)
+    echo '<div class="wp-block"><label for="listing_content">' . esc_html__( 'Description', 'classyfeds' ) . '</label>';
+    ob_start();
+    wp_editor(
+        '',                            // initial content
+        'listing_content',             // editor ID (must be unique on page)
+        [
+            'textarea_name' => 'listing_content',
+            'textarea_rows' => 8,
+            'media_buttons' => false,
+            'quicktags'     => true,
+        ]
+    );
+    $editor_content = ob_get_clean();
+    // Ensure the textarea is required (first occurrence only)
+    $editor_content = preg_replace( '/<textarea\b/', '<textarea required', $editor_content, 1 );
+    echo $editor_content;
+    echo '</div>';
 
-    echo '<p><label for="listing_type">' . esc_html__( 'Typ', 'classyfeds' ) . '</label><br />';
-    echo '<select id="listing_type" name="listing_type">';
+    // Type
+    echo '<div class="wp-block"><label for="listing_type">' . esc_html__( 'Typ', 'classyfeds' ) . '</label>';
+    echo '<select id="listing_type" name="listing_type" class="regular-text">';
     echo '<option value="Angebot">' . esc_html__( 'Angebot', 'classyfeds' ) . '</option>';
     echo '<option value="Gesuch">' . esc_html__( 'Gesuch', 'classyfeds' ) . '</option>';
-    echo '</select></p>';
+    echo '</select></div>';
 
-    echo '<p><label for="listing_category">' . esc_html__( 'Category', 'classyfeds' ) . '</label><br />';
+    // Category (multi-select). Uses $dropdown_html from earlier (built via wp_dropdown_categories + multiple-hack)
+    echo '<div class="wp-block"><label for="listing_category">' . esc_html__( 'Category', 'classyfeds' ) . '</label>';
     echo $dropdown_html;
-    echo '</p>';
+    echo '</div>';
 
-    echo '<p><label for="listing_image">' . esc_html__( 'Image', 'classyfeds' ) . '</label><br />';
-    echo '<input type="file" id="listing_image" name="listing_image" accept="image/*" /></p>';
+    // Image
+    echo '<div class="wp-block"><label for="listing_image">' . esc_html__( 'Image', 'classyfeds' ) . '</label>';
+    echo '<input type="file" id="listing_image" name="listing_image" accept="image/*" /></div>';
 
-    echo '<p><label for="listing_price">' . esc_html__( 'Price', 'classyfeds' ) . '</label><br />';
-    echo '<input type="number" id="listing_price" name="listing_price" step="0.01" placeholder="' . esc_attr__( '0.00', 'classyfeds' ) . '" required /></p>';
+    // Price
+    echo '<div class="wp-block"><label for="listing_price">' . esc_html__( 'Price', 'classyfeds' ) . '</label>';
+    echo '<input type="number" id="listing_price" name="listing_price" class="regular-text" step="0.01" placeholder="' . esc_attr__( '0.00', 'classyfeds' ) . '" required /></div>';
 
-    echo '<p><label for="listing_location">' . esc_html__( 'Location', 'classyfeds' ) . '</label><br />';
-    echo '<input type="text" id="listing_location" name="listing_location" required /></p>';
+    // Location
+    echo '<div class="wp-block"><label for="listing_location">' . esc_html__( 'Location', 'classyfeds' ) . '</label>';
+    echo '<input type="text" id="listing_location" name="listing_location" class="regular-text" required /></div>';
 
-    echo '<p><input type="submit" name="classyfeds_submit" value="' . esc_attr__( 'Submit', 'classyfeds' ) . '" /></p>';
+    // Submit
+    echo '<p><input type="submit" name="classyfeds_submit" class="button button-primary" value="' . esc_attr__( 'Submit', 'classyfeds' ) . '" /></p>';
+
+
+    echo '<div class="wp-block"><label for="listing_image">' . esc_html__( 'Image', 'classyfeds' ) . '</label>';
+    echo '<input type="file" id="listing_image" name="listing_image" accept="image/*" /></div>';
+
+    echo '<div class="wp-block"><label for="listing_price">' . esc_html__( 'Price', 'classyfeds' ) . '</label>';
+    echo '<input type="number" id="listing_price" name="listing_price" class="regular-text" step="0.01" placeholder="' . esc_attr__( '0.00', 'classyfeds' ) . '" required /></div>';
+
+    echo '<div class="wp-block"><label for="listing_location">' . esc_html__( 'Location', 'classyfeds' ) . '</label>';
+    echo '<input type="text" id="listing_location" name="listing_location" class="regular-text" required /></div>';
+
+    echo '<div class="wp-block"><input type="submit" name="classyfeds_submit" class="button button-primary" value="' . esc_attr__( 'Submit', 'classyfeds' ) . '" /></div>';
     echo '</form>';
 
     return ob_get_clean();
