@@ -708,38 +708,6 @@ function classyfeds_notify_remote( $post_id, $title, $content, $cat_names, $pric
     $success = true;
 }
 
-    }
-}
-
-    $payload = [
-        '@context' => 'https://www.w3.org/ns/activitystreams',
-        'type'     => 'Create',
-        'actor'    => home_url(),
-        'object'   => [
-            'type'     => 'Note',
-            'name'     => $title,
-            'content'  => $content,
-            'url'      => get_permalink( $post_id ),
-            'category' => $cat_names,
-            'price'    => $price,
-            'shipping' => $shipping,
-        ],
-    ];
-
-    if ( $image_id ) {
-        $payload['object']['image'] = wp_get_attachment_url( $image_id );
-    }
-
-    wp_remote_post(
-        $remote,
-        [
-            'headers' => [ 'Content-Type' => 'application/activity+json' ],
-            'body'    => wp_json_encode( $payload ),
-            'timeout' => 15,
-        ]
-    );
-}
-
 /**
  * Validate form data, create the listing and notify any remote inbox.
  *
