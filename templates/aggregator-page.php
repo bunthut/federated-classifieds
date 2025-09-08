@@ -83,7 +83,19 @@ $current_cat      = isset( $_GET['classyfeds_cat'] ) ? sanitize_title( wp_unslas
                         <?php if ( 'listing' === get_post_type() ) { ?>
                             <h2 class="entry-title"><a href="<?php the_permalink(); ?>"><?php the_title(); ?></a></h2>
                         <?php } else { ?>
-                            <h2 class="entry-title"><?php the_title(); ?></h2>
+                            <?php
+                            $link = '';
+                            if ( isset( $data['url'] ) ) {
+                                $link = $data['url'];
+                            } elseif ( isset( $data['id'] ) ) {
+                                $link = $data['id'];
+                            }
+                            ?>
+                            <?php if ( $link ) { ?>
+                                <h2 class="entry-title"><a href="<?php echo esc_url( $link ); ?>" target="_blank" rel="nofollow noopener"><?php the_title(); ?></a></h2>
+                            <?php } else { ?>
+                                <h2 class="entry-title"><?php the_title(); ?></h2>
+                            <?php } ?>
                         <?php } ?>
                     </header>
                     <div class="entry-content">
