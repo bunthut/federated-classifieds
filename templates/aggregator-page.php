@@ -29,7 +29,7 @@ $current_cat      = isset( $_GET['classyfeds_cat'] ) ? sanitize_title( wp_unslas
     <?php endif; ?>
     <main id="main" class="site-main classyfeds-listings">
         <div class="classyfeds-logo">
-            <img src="<?php echo esc_url( plugin_dir_url( dirname( __DIR__ ) ) . 'images/classyfeds.png' ); ?>" alt="ClassyFeds logo" />
+            <img src="<?php echo esc_url( get_stylesheet_directory_uri() . '/assets/images/classyfeds.png' ); ?>" alt="ClassyFeds logo" />
         </div>
         <?php
         $post_types = array( 'ap_object' );
