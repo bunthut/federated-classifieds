@@ -11,7 +11,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Register the "listing" custom post type.
+ * Register the "listing" custom post type and taxonomy.
  */
 add_action( 'init', function() {
     register_post_type( 'listing', [
@@ -36,26 +36,12 @@ add_action( 'init', function() {
                 'singular_name' => __( 'Listing Category', 'classyfeds' ),
             ],
             'public'       => true,
+            'show_ui'      => true,
             'show_in_rest' => true,
             'hierarchical' => true,
         ]
     );
 } );
-
-/**
- * Exclude listings from main queries unless enabled in settings.
- */
-add_action( 'pre_get_posts', function( $query ) {
-    if ( ! is_admin() && $query->is_main_query() && ! get_option( 'classyfeds_show_in_posts', false ) && ( $query->is_home() || $query->is_archive() || $query->is_search() ) ) {
-        $post_types = $query->get( 'post_type' );
-        if ( empty( $post_types ) || 'any' === $post_types ) {
-            $post_types = get_post_types( [ 'public' => true ] );
-        }
-        $post_types = array_diff( (array) $post_types, [ 'listing' ] );
-        $query->set( 'post_type', $post_types );
-    }
-} );
-
 
 /**
  * Add "Typ" dropdown to the listing editor.
@@ -79,10 +65,7 @@ add_action( 'add_meta_boxes', function() {
 
 /**
  * Register a custom post type for storing incoming ActivityPub objects.
- *
- * These objects are used to represent remote listings that arrive through
- * the federated inbox endpoint. The posts are not public but can be queried
- * so they may appear alongside local listings on the listings page template.
+ * These posts are not public but can be queried.
  */
 add_action( 'init', function() {
     register_post_type( 'ap_object', [
@@ -111,7 +94,6 @@ add_action( 'init', function() {
         'label_count'               => _n_noop( 'Expired <span class="count">(%s)</span>', 'Expired <span class="count">(%s)</span>', 'classyfeds' ),
     ] );
 } );
-
 
 /**
  * Save listing type and set default expiration date (60 days).
@@ -161,17 +143,11 @@ add_action( 'plugins_loaded', 'classyfeds_migrate_options' );
 
 /**
  * Handle plugin activation tasks.
- *
- * Creates the "Classifieds" page if it does not exist and schedules the
- * daily expiration event.
  */
 function classyfeds_activate() {
-    add_option( 'classyfeds_show_in_posts', false );
     $page_id = (int) get_option( 'classyfeds_page_id' );
 
-    if ( $page_id && get_post( $page_id ) ) {
-        // Page already exists and is stored in options.
-    } else {
+    if ( ! ( $page_id && get_post( $page_id ) ) ) {
         $page    = get_page_by_path( 'classifieds' );
         $page_id = $page ? $page->ID : 0;
 
@@ -193,25 +169,23 @@ function classyfeds_activate() {
         wp_schedule_event( time(), 'daily', 'classyfeds_expire_event' );
     }
 
-    // Insert default categories and optional subcategories similar to popular classifieds sites.
+    // Insert default categories and optional subcategories.
     $default_categories = [
-        'Auto, Rad & Boot'              => [ 'Autos', 'Motorräder', 'Boote', 'Fahrräder' ],
-        'Elektronik'                    => [ 'Computer', 'Handys & Telefone', 'TV, Video & Audio' ],
-        'Haus & Garten'                 => [ 'Möbel & Wohnen', 'Haushaltsgeräte', 'Heimwerker & Bau' ],
-        'Mode & Beauty'                 => [],
+        'Auto, Rad & Boot'                => [ 'Autos', 'Motorräder', 'Boote', 'Fahrräder' ],
+        'Elektronik'                      => [ 'Computer', 'Handys & Telefone', 'TV, Video & Audio' ],
+        'Haus & Garten'                   => [ 'Möbel & Wohnen', 'Haushaltsgeräte', 'Heimwerker & Bau' ],
+        'Mode & Beauty'                   => [],
         'Freizeit, Hobby & Nachbarschaft' => [],
-        'Familie, Kind & Baby'          => [],
-        'Dienstleistungen'              => [],
-        'Jobs'                          => [],
-        'Immobilien'                    => [],
+        'Familie, Kind & Baby'            => [],
+        'Dienstleistungen'                => [],
+        'Jobs'                            => [],
+        'Immobilien'                      => [],
     ];
     foreach ( $default_categories as $parent => $children ) {
         $existing  = term_exists( $parent, 'listing_category' );
-        $parent_id = 0;
+        $parent_id = $existing ? ( is_array( $existing ) ? $existing['term_id'] : $existing ) : 0;
 
-        if ( $existing ) {
-            $parent_id = is_array( $existing ) ? $existing['term_id'] : $existing;
-        } else {
+        if ( ! $parent_id ) {
             $term      = wp_insert_term( $parent, 'listing_category' );
             $parent_id = is_wp_error( $term ) ? 0 : $term['term_id'];
         }
@@ -227,10 +201,8 @@ function classyfeds_activate() {
 
     // Ensure a submission page exists with the listing form shortcode.
     $form_page_id = (int) get_option( 'classyfeds_form_page_id' );
-    if ( $form_page_id && get_post( $form_page_id ) ) {
-        // Page already exists and is stored.
-    } else {
-        $page        = get_page_by_path( 'submit-listing' );
+    if ( ! ( $form_page_id && get_post( $form_page_id ) ) ) {
+        $page         = get_page_by_path( 'submit-listing' );
         $form_page_id = $page ? $page->ID : 0;
 
         if ( ! $form_page_id ) {
@@ -270,10 +242,9 @@ function classyfeds_activate() {
         }
     }
 
-    // Flush rewrite rules to ensure custom routes are registered.
+    // Flush rewrite rules.
     flush_rewrite_rules();
 }
-
 register_activation_hook( __FILE__, 'classyfeds_activate' );
 
 register_deactivation_hook( __FILE__, function() {
@@ -304,14 +275,11 @@ function classyfeds_settings_page() {
 
     $editable_roles = get_editable_roles();
     $selected       = (array) get_option( 'classyfeds_publish_roles', [] );
-    $show_in_posts  = (bool) get_option( 'classyfeds_show_in_posts', false );
     $message        = '';
 
     if ( isset( $_POST['classyfeds_save'] ) && check_admin_referer( 'classyfeds_save_settings', 'classyfeds_nonce' ) ) {
-        $selected      = isset( $_POST['publish_roles'] ) ? array_map( 'sanitize_text_field', (array) wp_unslash( $_POST['publish_roles'] ) ) : [];
-        $show_in_posts = isset( $_POST['show_in_posts'] );
+        $selected = isset( $_POST['publish_roles'] ) ? array_map( 'sanitize_text_field', (array) wp_unslash( $_POST['publish_roles'] ) ) : [];
         update_option( 'classyfeds_publish_roles', $selected );
-        update_option( 'classyfeds_show_in_posts', $show_in_posts );
 
         foreach ( $editable_roles as $role_key => $details ) {
             $role = get_role( $role_key );
@@ -343,9 +311,6 @@ function classyfeds_settings_page() {
         echo '<label><input type="checkbox" name="publish_roles[]" value="' . esc_attr( $role_key ) . '" ' . checked( in_array( $role_key, $selected, true ), true, false ) . ' /> ' . esc_html( $details['name'] ) . '</label><br />';
     }
     echo '</td></tr>';
-    echo '<tr><th scope="row">' . esc_html__( 'Show listings in posts', 'classyfeds' ) . '</th><td>';
-    echo '<label><input type="checkbox" name="show_in_posts" value="1" ' . checked( $show_in_posts, true, false ) . ' /> ' . esc_html__( 'Include listing posts on home, archive, and search pages', 'classyfeds' ) . '</label>';
-    echo '</td></tr>';
     echo '</table>';
 
     submit_button( __( 'Save Changes', 'classyfeds' ), 'primary', 'classyfeds_save' );
@@ -359,16 +324,19 @@ function fed_classifieds_settings_page() {
     classyfeds_settings_page();
 }
 
+/**
+ * Cron: expire listings.
+ */
 add_action( 'classyfeds_expire_event', function() {
     $now   = current_time( 'timestamp' );
     $posts = get_posts( [
-        'post_type'   => 'listing',
-        'post_status' => 'publish',
-        'meta_key'    => '_expires_at',
-        'meta_value'  => $now,
-        'meta_compare'=> '<=',
-        'fields'      => 'ids',
-        'numberposts' => -1,
+        'post_type'    => 'listing',
+        'post_status'  => 'publish',
+        'meta_key'     => '_expires_at',
+        'meta_value'   => $now,
+        'meta_compare' => '<=',
+        'fields'       => 'ids',
+        'numberposts'  => -1,
     ] );
 
     foreach ( $posts as $id ) {
@@ -390,11 +358,11 @@ add_action( 'wp_head', function() {
     $image   = get_the_post_thumbnail_url( $post->ID, 'full' );
 
     $data = [
-        '@context' => 'https://schema.org/',
-        '@type'    => 'Offer',
-        'name'     => get_the_title( $post ),
+        '@context'    => 'https://schema.org/',
+        '@type'       => 'Offer',
+        'name'        => get_the_title( $post ),
         'description' => wp_strip_all_tags( get_the_excerpt( $post ) ),
-        'url'      => get_permalink( $post ),
+        'url'         => get_permalink( $post ),
     ];
 
     if ( $image ) {
@@ -491,10 +459,10 @@ function classyfeds_inbox_handler( WP_REST_Request $request ) {
 
     $post_id = wp_insert_post(
         [
-            'post_type'   => 'ap_object',
-            'post_status' => 'publish',
-            'post_title'  => $title,
-            'post_content'=> wp_json_encode( $object ),
+            'post_type'    => 'ap_object',
+            'post_status'  => 'publish',
+            'post_title'   => $title,
+            'post_content' => wp_json_encode( $object ),
         ],
         true
     );
@@ -506,7 +474,6 @@ function classyfeds_inbox_handler( WP_REST_Request $request ) {
     return new WP_REST_Response( [ 'stored' => $post_id ], 202 );
 }
 
-/**
 /**
  * Retrieve listings and ActivityPub objects as an ActivityStreams collection.
  *
@@ -528,7 +495,6 @@ function classyfeds_listings_handler( WP_REST_Request $request ) {
         if ( 'ap_object' === $post->post_type ) {
             $data = json_decode( $post->post_content, true );
             if ( is_array( $data ) ) {
-                // Force context to include required metadata definitions.
                 $data['@context'] = [
                     'https://www.w3.org/ns/activitystreams',
                     [
@@ -537,12 +503,9 @@ function classyfeds_listings_handler( WP_REST_Request $request ) {
                         'category' => 'https://schema.org/category',
                     ],
                 ];
-
-                // Ensure visibility fields are present.
                 $data['to'] = $data['to'] ?? 'https://www.w3.org/ns/activitystreams#Public';
                 $data['cc'] = $data['cc'] ?? 'https://www.w3.org/ns/activitystreams#Public';
 
-                // Skip objects missing mandatory metadata.
                 if ( empty( $data['price'] ) || empty( $data['location'] ) || empty( $data['category'] ) ) {
                     continue;
                 }
@@ -556,7 +519,6 @@ function classyfeds_listings_handler( WP_REST_Request $request ) {
         $price    = get_post_meta( $post->ID, '_price', true );
         $location = get_post_meta( $post->ID, '_location', true );
 
-        // Skip listings missing required metadata.
         if ( empty( $price ) || empty( $location ) || empty( $cats ) ) {
             continue;
         }
@@ -598,18 +560,10 @@ function classyfeds_listings_handler( WP_REST_Request $request ) {
 }
 
 add_shortcode( 'classyfeds_form', 'classyfeds_form_shortcode' );
-// Backward compatibility.
-add_shortcode( 'fed_classifieds_form', 'classyfeds_form_shortcode' );
+add_shortcode( 'fed_classifieds_form', 'classyfeds_form_shortcode' ); // Back-compat
 
 /**
  * Shortcode handler for `[classyfeds_form]`.
- *
- * Displays a submission form that allows visitors to create new listings.
- * Submitted listings are stored locally and optionally forwarded to a
- * configurable ActivityPub inbox via the `classyfeds_remote_inbox`
- * option.
- *
- * @return string Form HTML.
  */
 function classyfeds_form_shortcode() {
     if ( ! is_user_logged_in() ) {
@@ -619,6 +573,7 @@ function classyfeds_form_shortcode() {
     if ( ! current_user_can( 'publish_listings' ) ) {
         return '<p>' . esc_html__( 'You do not have permission to submit listings.', 'classyfeds' ) . '</p>';
     }
+
     $success = false;
     $error   = false;
 
@@ -626,15 +581,15 @@ function classyfeds_form_shortcode() {
         if ( ! isset( $_POST['classyfeds_nonce'] ) || ! wp_verify_nonce( $_POST['classyfeds_nonce'], 'classyfeds_new_listing' ) ) {
             $error = true;
         } else {
-            $title    = isset( $_POST['listing_title'] ) ? sanitize_text_field( wp_unslash( $_POST['listing_title'] ) ) : '';
-            $content  = isset( $_POST['listing_content'] ) ? wp_kses_post( wp_unslash( $_POST['listing_content'] ) ) : '';
-            $type     = isset( $_POST['listing_type'] ) ? sanitize_text_field( wp_unslash( $_POST['listing_type'] ) ) : '';
-            $cat      = isset( $_POST['listing_category'] ) ? absint( wp_unslash( $_POST['listing_category'] ) ) : 0;
-            $price    = isset( $_POST['listing_price'] ) ? sanitize_text_field( wp_unslash( $_POST['listing_price'] ) ) : '';
-            $location = isset( $_POST['listing_location'] ) ? sanitize_text_field( wp_unslash( $_POST['listing_location'] ) ) : '';
-            $image_id = 0;
+            $title         = isset( $_POST['listing_title'] ) ? sanitize_text_field( wp_unslash( $_POST['listing_title'] ) ) : '';
+            $content       = isset( $_POST['listing_content'] ) ? wp_kses_post( wp_unslash( $_POST['listing_content'] ) ) : '';
+            $type          = isset( $_POST['listing_type'] ) ? sanitize_text_field( wp_unslash( $_POST['listing_type'] ) ) : '';
+            $selected_cats = isset( $_POST['listing_category'] ) ? array_filter( array_map( 'absint', (array) wp_unslash( $_POST['listing_category'] ) ) ) : [];
+            $price         = isset( $_POST['listing_price'] ) ? sanitize_text_field( wp_unslash( $_POST['listing_price'] ) ) : '';
+            $location      = isset( $_POST['listing_location'] ) ? sanitize_text_field( wp_unslash( $_POST['listing_location'] ) ) : '';
+            $image_id      = 0;
 
-            if ( '' === $title || '' === $content || '' === $price || '' === $location ) {
+            if ( '' === $title || '' === $content || '' === $price || '' === $location || empty( $selected_cats ) ) {
                 $error = true;
             } else {
                 $post_id = wp_insert_post(
@@ -648,8 +603,8 @@ function classyfeds_form_shortcode() {
                 );
 
                 if ( ! is_wp_error( $post_id ) ) {
-                    if ( $cat ) {
-                        wp_set_post_terms( $post_id, [ $cat ], 'listing_category' );
+                    if ( $selected_cats ) {
+                        wp_set_post_terms( $post_id, $selected_cats, 'listing_category' );
                     }
                     if ( $type ) {
                         update_post_meta( $post_id, '_listing_type', $type );
@@ -710,23 +665,45 @@ function classyfeds_form_shortcode() {
 
     wp_enqueue_style( 'classyfeds', plugin_dir_url( __FILE__ ) . 'assets/css/classyfeds.css', [], '0.1.0' );
 
-    $cat_slugs = get_option( 'classyfeds_filter_categories', '' );
+    // Optional: restrict categories by slug list in settings.
+    $cat_slugs   = get_option( 'classyfeds_filter_categories', '' );
+    $include_ids = [];
     if ( $cat_slugs ) {
         $slug_list = array_filter( array_map( 'trim', explode( ',', $cat_slugs ) ) );
         if ( $slug_list ) {
-            $cats = get_terms(
+            $include_ids = get_terms(
                 [
                     'taxonomy'   => 'listing_category',
                     'slug'       => $slug_list,
                     'hide_empty' => false,
+                    'fields'     => 'ids',
                 ]
             );
-        } else {
-            $cats = get_terms( [ 'taxonomy' => 'listing_category', 'hide_empty' => false ] );
+            if ( is_wp_error( $include_ids ) ) {
+                $include_ids = [];
+            }
         }
-    } else {
-        $cats = get_terms( [ 'taxonomy' => 'listing_category', 'hide_empty' => false ] );
     }
+
+    // Build a multi-select dropdown for listing_category (wp_dropdown_categories hack).
+    $dropdown_args = [
+        'taxonomy'         => 'listing_category',
+        'hide_empty'       => false,
+        'show_option_none' => false,
+        'name'             => 'listing_category', // will be converted to [] below
+        'id'               => 'listing_category',
+        'echo'             => 0,
+    ];
+    if ( $include_ids ) {
+        $dropdown_args['include'] = $include_ids;
+    }
+    $dropdown_html = wp_dropdown_categories( $dropdown_args );
+    // Convert to <select multiple name="listing_category[]"> and add required.
+    $dropdown_html = preg_replace(
+        '/<select([^>]*)name="listing_category"([^>]*)>/i',
+        '<select$1name="listing_category[]"$2 multiple="multiple" required>',
+        $dropdown_html
+    );
 
     ob_start();
 
@@ -738,6 +715,7 @@ function classyfeds_form_shortcode() {
 
     echo '<form method="post" class="classyfeds-form" enctype="multipart/form-data">';
     wp_nonce_field( 'classyfeds_new_listing', 'classyfeds_nonce' );
+
     echo '<p><label for="listing_title">' . esc_html__( 'Title', 'classyfeds' ) . '</label><br />';
     echo '<input type="text" id="listing_title" name="listing_title" placeholder="' . esc_attr__( 'Short title', 'classyfeds' ) . '" required /></p>';
 
@@ -751,11 +729,8 @@ function classyfeds_form_shortcode() {
     echo '</select></p>';
 
     echo '<p><label for="listing_category">' . esc_html__( 'Category', 'classyfeds' ) . '</label><br />';
-    echo '<select id="listing_category" name="listing_category">';
-    foreach ( $cats as $cat ) {
-        echo '<option value="' . esc_attr( $cat->term_id ) . '">' . esc_html( $cat->name ) . '</option>';
-    }
-    echo '</select></p>';
+    echo $dropdown_html;
+    echo '</p>';
 
     echo '<p><label for="listing_image">' . esc_html__( 'Image', 'classyfeds' ) . '</label><br />';
     echo '<input type="file" id="listing_image" name="listing_image" accept="image/*" /></p>';
