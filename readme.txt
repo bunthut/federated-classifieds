@@ -2,16 +2,16 @@
 Contributors: thomi, amis
 Requires at least: 5.0
 Tested up to: 6.4
-Stable tag: 0.1.3
+Stable tag: 0.1.4
 License: GPL-2.0+
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-A minimal plugin providing a `listing` custom post type, JSON-LD markup, automatic expiration, and a frontend form that can forward listings to an ActivityPub inbox. On activation it also creates a submission page with required price and location fields.
+A minimal plugin providing a `listing` custom post type, JSON-LD markup, automatic expiration, and a frontend form powered by Contact Form 7 that can forward listings to an ActivityPub inbox. On activation it also creates a submission page with required price and shipping fields.
 
 == Description ==
 This plugin registers a "listing" custom post type with an expiration date and outputs structured JSON-LD data for each listing.
 
-On activation a "Classifieds" page is created and its ID stored in the `classyfeds_page_id` option. A separate "Submit Listing" page with the `[classyfeds_form]` shortcode is also generated. The bundled template displays local listings alongside ActivityPub objects that arrive through the REST inbox.
+On activation a "Classifieds" page is created and its ID stored in the `classyfeds_page_id` option. A separate "Submit Listing" page with a Contact Form 7 shortcode is also generated. The bundled template displays local listings alongside ActivityPub objects that arrive through the REST inbox.
 
 The plugin provides two REST API endpoints for federation:
 
@@ -27,6 +27,9 @@ The plugin also defines a `publish_listings` capability controlling who may subm
 2. Activate the plugin through the "Plugins" menu in WordPress.
 
 == Changelog ==
+= 0.1.4 =
+* Replaced `[classyfeds_form]` shortcode with a Contact Form 7 submission form and `wpcf7_mail_sent` handler.
+
 = 0.1.3 =
 * Added option to hide listings from home, archive, and search queries.
 
