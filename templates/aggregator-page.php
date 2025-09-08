@@ -29,7 +29,7 @@ $current_cat      = isset( $_GET['classyfeds_cat'] ) ? sanitize_title( wp_unslas
     <?php endif; ?>
     <main id="main" class="site-main classyfeds-listings">
         <div class="classyfeds-logo">
-            <img src="<?php echo esc_url( plugin_dir_url( dirname( __DIR__ ) ) . 'images/classyfeds.png' ); ?>" alt="ClassyFeds logo" />
+            <img src="<?php echo esc_url( get_stylesheet_directory_uri() . '/assets/images/classyfeds.png' ); ?>" alt="ClassyFeds logo" />
         </div>
         <?php
         $post_types = array( 'ap_object' );
@@ -83,7 +83,19 @@ $current_cat      = isset( $_GET['classyfeds_cat'] ) ? sanitize_title( wp_unslas
                         <?php if ( 'listing' === get_post_type() ) { ?>
                             <h2 class="entry-title"><a href="<?php the_permalink(); ?>"><?php the_title(); ?></a></h2>
                         <?php } else { ?>
-                            <h2 class="entry-title"><?php the_title(); ?></h2>
+                            <?php
+                            $link = '';
+                            if ( isset( $data['url'] ) ) {
+                                $link = $data['url'];
+                            } elseif ( isset( $data['id'] ) ) {
+                                $link = $data['id'];
+                            }
+                            ?>
+                            <?php if ( $link ) { ?>
+                                <h2 class="entry-title"><a href="<?php echo esc_url( $link ); ?>" target="_blank" rel="nofollow noopener"><?php the_title(); ?></a></h2>
+                            <?php } else { ?>
+                                <h2 class="entry-title"><?php the_title(); ?></h2>
+                            <?php } ?>
                         <?php } ?>
                     </header>
                     <div class="entry-content">
