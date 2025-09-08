@@ -13,7 +13,18 @@
             }
 
             var $header = $( '<header/>' ).addClass( 'entry-header' );
-            $( '<h2/>' ).addClass( 'entry-title' ).text( item.title || '' ).appendTo( $header );
+            var $title = $( '<h2/>' ).addClass( 'entry-title' );
+            if ( item.link ) {
+                $( '<a/>' )
+                    .attr( 'href', item.link )
+                    .attr( 'target', '_blank' )
+                    .attr( 'rel', 'nofollow noopener' )
+                    .text( item.title || '' )
+                    .appendTo( $title );
+            } else {
+                $title.text( item.title || '' );
+            }
+            $title.appendTo( $header );
             $header.appendTo( $article );
 
             if ( item.content ) {
@@ -36,10 +47,17 @@
                         if ( item.image ) {
                             img = item.image.url || item.image;
                         }
+                        var link = '';
+                        if ( item.url ) {
+                            link = item.url;
+                        } else if ( item.id ) {
+                            link = item.id;
+                        }
                         return {
                             title: item.name || '',
                             content: item.content || item.summary || '',
                             image: img,
+                            link: link,
                         };
                     } );
                     renderListings( items );
