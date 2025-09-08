@@ -608,12 +608,12 @@ function classyfeds_form_shortcode() {
             $title    = isset( $_POST['listing_title'] ) ? sanitize_text_field( wp_unslash( $_POST['listing_title'] ) ) : '';
             $content  = isset( $_POST['listing_content'] ) ? wp_kses_post( wp_unslash( $_POST['listing_content'] ) ) : '';
             $type     = isset( $_POST['listing_type'] ) ? sanitize_text_field( wp_unslash( $_POST['listing_type'] ) ) : '';
-            $cat      = isset( $_POST['listing_category'] ) ? absint( wp_unslash( $_POST['listing_category'] ) ) : 0;
+            $selected_cats = isset( $_POST['listing_category'] ) ? array_map( 'absint', (array) wp_unslash( $_POST['listing_category'] ) ) : [];
             $price    = isset( $_POST['listing_price'] ) ? sanitize_text_field( wp_unslash( $_POST['listing_price'] ) ) : '';
             $location = isset( $_POST['listing_location'] ) ? sanitize_text_field( wp_unslash( $_POST['listing_location'] ) ) : '';
             $image_id = 0;
 
-            if ( '' === $title || '' === $content || '' === $price || '' === $location ) {
+            if ( '' === $title || '' === $content || '' === $price || '' === $location || empty( $selected_cats ) ) {
                 $error = true;
             } else {
                 $post_id = wp_insert_post(
@@ -627,8 +627,8 @@ function classyfeds_form_shortcode() {
                 );
 
                 if ( ! is_wp_error( $post_id ) ) {
-                    if ( $cat ) {
-                        wp_set_post_terms( $post_id, [ $cat ], 'listing_category' );
+                    if ( $selected_cats ) {
+                        wp_set_post_terms( $post_id, $selected_cats, 'listing_category' );
                     }
                     if ( $type ) {
                         update_post_meta( $post_id, '_listing_type', $type );
@@ -730,7 +730,7 @@ function classyfeds_form_shortcode() {
     echo '</select></p>';
 
     echo '<p><label for="listing_category">' . esc_html__( 'Category', 'classyfeds' ) . '</label><br />';
-    echo '<select id="listing_category" name="listing_category">';
+    echo '<select id="listing_category" name="listing_category[]" multiple="multiple" required>';
     foreach ( $cats as $cat ) {
         echo '<option value="' . esc_attr( $cat->term_id ) . '">' . esc_html( $cat->name ) . '</option>';
     }
