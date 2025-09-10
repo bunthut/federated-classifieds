@@ -20,6 +20,8 @@ The plugin provides two REST API endpoints for federation:
 
 Any objects delivered to the inbox appear on the Classifieds page and in the listings endpoint.
 
+Uploaded listing images are stored privately in a `classyfeds` uploads directory and do not appear in the Media Library.
+
 The plugin also defines a `publish_listings` capability controlling who may submit listings. An options page under **Settings → Classifieds** lets administrators grant or revoke this capability for roles and choose whether listings appear in home, archive, and search queries. By default it is provided to Authors and a new "Listing Contributor" role.
 
 == Installation ==
