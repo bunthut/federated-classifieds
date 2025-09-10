@@ -665,9 +665,21 @@ if ( isset( $_POST['classyfeds_submit'] ) ) {
         $selected_cats = isset( $_POST['listing_category'] ) ? array_filter( array_map( 'absint', (array) wp_unslash( $_POST['listing_category'] ) ) ) : [];
         $price         = isset( $_POST['listing_price'] ) ? sanitize_text_field( wp_unslash( $_POST['listing_price'] ) ) : '';
         $location      = isset( $_POST['listing_location'] ) ? sanitize_text_field( wp_unslash( $_POST['listing_location'] ) ) : '';
-        $image_id      = 0;
+$delivery      = isset( $_POST['listing_delivery'] ) ? sanitize_text_field( wp_unslash( $_POST['listing_delivery'] ) ) : '';
+$allowed_deliveries = [ 'Abholung', 'Versand' ];
 
-        if ( '' === $title || '' === $content || '' === $price || '' === $location || empty( $selected_cats ) ) {
+if ( ! in_array( $delivery, $allowed_deliveries, true ) ) {
+    $delivery = '';
+}
+
+$image_id      = 0;
+
+if ( '' === $title || '' === $content || '' === $price || '' === $location || '' === $delivery || empty( $selected_cats ) ) {
+    $error = true;
+} else {
+    // Continue with the rest of the code for processing the listing
+}
+
             $error = true;
         } else {
             $post_id = wp_insert_post(
@@ -692,34 +704,35 @@ if ( isset( $_POST['classyfeds_submit'] ) ) {
                     require_once ABSPATH . 'wp-admin/includes/media.php';
                     require_once ABSPATH . 'wp-admin/includes/image.php';
 
-                    $upload_filter = function ( $dirs ) {
-                        $subdir        = '/classyfeds';
-                        $dirs['path']  = $dirs['basedir'] . $subdir;
-                        $dirs['url']   = $dirs['baseurl'] . $subdir;
-                        $dirs['subdir'] = $subdir;
+$upload_filter = function ( $dirs ) {
+    $subdir        = '/classyfeds';
+    $dirs['path']  = $dirs['basedir'] . $subdir;
+    $dirs['url']   = $dirs['baseurl'] . $subdir;
+    $dirs['subdir'] = $subdir;
 
-                        return $dirs;
-                    };
+    return $dirs;
+};
 
-                    add_filter( 'upload_dir', $upload_filter );
-                    $image_id = media_handle_upload( 'listing_image', $post_id );
-                    remove_filter( 'upload_dir', $upload_filter );
+add_filter( 'upload_dir', $upload_filter );
+$image_id = media_handle_upload( 'listing_image', $post_id );
+remove_filter( 'upload_dir', $upload_filter );
 
-                    if ( ! is_wp_error( $image_id ) ) {
-                        wp_update_post(
-                            [
-                                'ID'          => $image_id,
-                                'post_status' => 'private',
-                            ]
-                        );
-                        set_post_thumbnail( $post_id, $image_id );
-                    } else {
-                        $image_id = 0;
-                    }
-                }
+if ( ! is_wp_error( $image_id ) ) {
+    wp_update_post(
+        [
+            'ID'          => $image_id,
+            'post_status' => 'private',
+        ]
+    );
+    set_post_thumbnail( $post_id, $image_id );
+} else {
+    $image_id = 0;
+}
 
-                update_post_meta( $post_id, '_price', $price );
-                update_post_meta( $post_id, '_location', $location );
+update_post_meta( $post_id, '_price', $price );
+update_post_meta( $post_id, '_location', $location );
+update_post_meta( $post_id, '_delivery_method', $delivery );
+
 
                 $remote = get_option( 'classyfeds_remote_inbox' );
                 if ( $remote ) {
@@ -736,22 +749,42 @@ if ( isset( $_POST['classyfeds_submit'] ) ) {
                             'listingType' => $type,
                             'price'       => $price,
                             'location'    => $location,
-                        ],
-                    ];
-                    if ( $image_id ) {
-                        $payload['object']['image'] = wp_get_attachment_url( $image_id );
-                    }
-                    wp_remote_post(
-                        $remote,
-                        [
-                            'headers' => [ 'Content-Type' => 'application/activity+json' ],
-                            'body'    => wp_json_encode( $payload ),
-                            'timeout' => 15,
-                        ]
-                    );
-                }
+$payload = [
+    '@context' => 'https://www.w3.org/ns/activitystreams',
+    'type'     => 'Create',
+    'actor'    => home_url(),
+    'object'   => [
+        'type'        => 'Note',
+        'name'        => $title,
+        'content'     => $content,
+        'url'         => get_permalink( $post_id ),
+        'category'    => array_values( wp_get_post_terms( $post_id, 'listing_category', [ 'fields' => 'names' ] ) ),
+        'listingType' => $type,
+        'price'       => $price,
+        'location'    => $location,
+        'deliveryMethod' => $delivery,
+    ],
+];
 
-                $success = true
+if ( $image_id ) {
+    $payload['object']['image'] = wp_get_attachment_url( $image_id );
+}
+
+wp_remote_post(
+    $remote,
+    [
+        'headers' => [ 'Content-Type' => 'application/activity+json' ],
+        'body'    => wp_json_encode( $payload ),
+        'timeout' => 15,
+    ]
+);
+
+$success = true;
+} else {
+    $error = true;
+}
+}
+}
 
 
 return is_wp_error( $image_id ) ? 0 : (int) $image_id;
@@ -851,12 +884,23 @@ function classyfeds_process_listing_submission( array $data, array $files ) {
 
     $image_id = classyfeds_upload_listing_image( $image_path, $post_id );
 
-    update_post_meta( $post_id, '_price', $price );
-    update_post_meta( $post_id, '_shipping', $shipping );
+<// Delivery method
+echo '<div class="wp-block"><label for="listing_delivery">' . esc_html__( 'Delivery', 'classyfeds' ) . '</label>';
+echo '<select id="listing_delivery" name="listing_delivery" class="regular-text" required>';
+echo '<option value="Abholung">' . esc_html__( 'Abholung', 'classyfeds' ) . '</option>';
+echo '<option value="Versand">' . esc_html__( 'Versand', 'classyfeds' ) . '</option>';
+echo '</select></div>';
 
-    classyfeds_notify_remote( $post_id, $title, $content, $cat_names, $price, $shipping, $image_id );
+// Submit
+echo '<div class="wp-block"><input type="submit" name="classyfeds_submit" class="button button-primary" value="' . esc_attr__( 'Submit', 'classyfeds' ) . '" /></div>';
+echo '</form>';
 
-    return $post_id;
+update_post_meta( $post_id, '_price', $price );
+update_post_meta( $post_id, '_shipping', $shipping );
+
+classyfeds_notify_remote( $post_id, $title, $content, $cat_names, $price, $shipping, $image_id );
+
+return $post_id;
 }
 
 /**
@@ -878,6 +922,7 @@ function classyfeds_cf7_handle_submission( $contact_form ) {
     if ( ! $submission ) {
         return;
     }
+
 
     classyfeds_process_listing_submission( $submission->get_posted_data(), $submission->uploaded_files() );
 }
