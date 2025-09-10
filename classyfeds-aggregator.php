@@ -108,7 +108,6 @@ function settings_page() {
     $message           = '';
     $current_page      = (int) get_option( 'classyfeds_page_id' );
     $remote_inbox      = get_option( 'classyfeds_remote_inbox', '' );
-    $filter_categories = get_option( 'classyfeds_filter_categories', '' );
     $filter_posts      = (int) get_option( 'classyfeds_filter_posts', 0 );
 
     if ( isset( $_POST['classyfeds_save'] ) && check_admin_referer( 'classyfeds_save_settings', 'classyfeds_nonce' ) ) {
@@ -131,9 +130,27 @@ function settings_page() {
             }
         }
 
-        $remote_inbox      = isset( $_POST['classyfeds_remote_inbox'] ) ? esc_url_raw( wp_unslash( $_POST['classyfeds_remote_inbox'] ) ) : '';
-        $filter_categories = isset( $_POST['classyfeds_filter_categories'] ) ? sanitize_text_field( wp_unslash( $_POST['classyfeds_filter_categories'] ) ) : '';
-        $filter_posts      = isset( $_POST['classyfeds_filter_posts'] ) ? absint( wp_unslash( $_POST['classyfeds_filter_posts'] ) ) : 0;
+        $remote_inbox = isset( $_POST['classyfeds_remote_inbox'] ) ? esc_url_raw( wp_unslash( $_POST['classyfeds_remote_inbox'] ) ) : '';
+        $filter_posts = isset( $_POST['classyfeds_filter_posts'] ) ? absint( wp_unslash( $_POST['classyfeds_filter_posts'] ) ) : 0;
+
+        // Add new category if provided.
+        if ( ! empty( $_POST['classyfeds_new_cat_name'] ) ) {
+            $new_cat_name   = sanitize_text_field( wp_unslash( $_POST['classyfeds_new_cat_name'] ) );
+            $new_cat_parent = isset( $_POST['classyfeds_new_cat_parent'] ) ? absint( $_POST['classyfeds_new_cat_parent'] ) : 0;
+            wp_insert_term( $new_cat_name, 'listing_category', [ 'parent' => $new_cat_parent ] );
+        }
+
+        // Rename existing category if requested.
+        if ( ! empty( $_POST['classyfeds_edit_cat'] ) && ! empty( $_POST['classyfeds_edit_cat_name'] ) ) {
+            $edit_cat_id     = absint( $_POST['classyfeds_edit_cat'] );
+            $edit_cat_name   = sanitize_text_field( wp_unslash( $_POST['classyfeds_edit_cat_name'] ) );
+            $edit_cat_parent = isset( $_POST['classyfeds_edit_cat_parent'] ) ? absint( $_POST['classyfeds_edit_cat_parent'] ) : 0;
+            wp_update_term( $edit_cat_id, 'listing_category', [ 'name' => $edit_cat_name, 'parent' => $edit_cat_parent ] );
+        }
+
+        // Refresh stored category slugs.
+        $terms             = get_terms( 'listing_category', [ 'hide_empty' => false ] );
+        $filter_categories = join( ',', wp_list_pluck( $terms, 'slug' ) );
 
         update_option( 'classyfeds_page_id', $page_id );
         update_option( 'classyfeds_remote_inbox', $remote_inbox );
@@ -168,7 +185,53 @@ function settings_page() {
     echo '</td></tr>';
     echo '<tr><th scope="row">' . esc_html__( 'or Slug', 'classyfeds-aggregator' ) . '</th><td><input type="text" name="classyfeds_slug" value="" class="regular-text" /></td></tr>';
     echo '<tr><th scope="row">' . esc_html__( 'Remote Inbox URL', 'classyfeds-aggregator' ) . '</th><td><input type="url" name="classyfeds_remote_inbox" value="' . esc_attr( $remote_inbox ) . '" class="regular-text" /></td></tr>';
-    echo '<tr><th scope="row">' . esc_html__( 'Filter Categories', 'classyfeds-aggregator' ) . '</th><td><input type="text" name="classyfeds_filter_categories" value="' . esc_attr( $filter_categories ) . '" class="regular-text" /><p class="description">' . esc_html__( 'Comma-separated category slugs', 'classyfeds-aggregator' ) . '</p></td></tr>';
+    echo '<tr><th scope="row">' . esc_html__( 'Listing Categories', 'classyfeds-aggregator' ) . '</th><td>';
+
+    $terms = get_terms( 'listing_category', [ 'hide_empty' => false ] );
+    if ( ! is_wp_error( $terms ) && ! empty( $terms ) ) {
+        echo '<ul>';
+        foreach ( $terms as $term ) {
+            echo '<li>' . esc_html( $term->name ) . ' (' . esc_html( $term->slug ) . ')</li>';
+        }
+        echo '</ul>';
+    } else {
+        echo '<p>' . esc_html__( 'No categories found.', 'classyfeds-aggregator' ) . '</p>';
+    }
+
+    echo '<h4>' . esc_html__( 'Add Category', 'classyfeds-aggregator' ) . '</h4><p><input type="text" name="classyfeds_new_cat_name" value="" class="regular-text" /> ';
+    wp_dropdown_categories(
+        [
+            'taxonomy'         => 'listing_category',
+            'name'             => 'classyfeds_new_cat_parent',
+            'show_option_none' => __( '— Parent —', 'classyfeds-aggregator' ),
+            'hide_empty'       => false,
+            'selected'         => 0,
+        ]
+    );
+    echo '</p>';
+
+    echo '<h4>' . esc_html__( 'Rename Category', 'classyfeds-aggregator' ) . '</h4>';
+    wp_dropdown_categories(
+        [
+            'taxonomy'         => 'listing_category',
+            'name'             => 'classyfeds_edit_cat',
+            'show_option_none' => __( '— Select —', 'classyfeds-aggregator' ),
+            'hide_empty'       => false,
+        ]
+    );
+    echo '<p><input type="text" name="classyfeds_edit_cat_name" value="" class="regular-text" /> ';
+    wp_dropdown_categories(
+        [
+            'taxonomy'         => 'listing_category',
+            'name'             => 'classyfeds_edit_cat_parent',
+            'show_option_none' => __( '— Parent —', 'classyfeds-aggregator' ),
+            'hide_empty'       => false,
+            'selected'         => 0,
+        ]
+    );
+    echo '</p>';
+
+    echo '</td></tr>';
     echo '<tr><th scope="row">' . esc_html__( 'Posts Per Page', 'classyfeds-aggregator' ) . '</th><td><input type="number" name="classyfeds_filter_posts" value="' . esc_attr( $filter_posts ) . '" class="small-text" min="0" /></td></tr>';
     echo '</table>';
 
