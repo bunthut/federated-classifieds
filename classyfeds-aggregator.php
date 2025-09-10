@@ -6,14 +6,16 @@
  * Author: thomi@etik.com + amis
  */
 
+namespace ClassyFeds;
+
 if ( ! defined( 'ABSPATH' ) ) {
     exit; // Exit if accessed directly.
 }
 
 /**
- * Register a custom post type for storing incoming ActivityPub objects.
+ * Register custom post type for ActivityPub objects and listing taxonomy.
  */
-add_action( 'init', function() {
+function register_post_type_and_taxonomy() {
     register_post_type( 'ap_object', [
         'labels' => [
             'name'          => __( 'ActivityPub Objects', 'classyfeds-aggregator' ),
@@ -38,65 +40,76 @@ add_action( 'init', function() {
             'hierarchical' => true,
         ]
     );
-} );
-
-/**
- * Handle plugin activation: ensure the Classifieds page exists.
- */
-function classyfeds_aggregator_activate() {
-    $page_id = (int) get_option( 'classyfeds_page_id' );
-
-    if ( $page_id && get_post( $page_id ) ) {
-        // Page already exists.
-    } else {
-        $page    = get_page_by_path( 'classifieds' );
-        $page_id = $page ? $page->ID : 0;
-
-        if ( ! $page_id ) {
-            $page_id = wp_insert_post( [
-                'post_title'  => __( 'Classifieds', 'classyfeds-aggregator' ),
-                'post_name'   => 'classifieds',
-                'post_status' => 'publish',
-                'post_type'   => 'page',
-            ] );
-        }
-
-        if ( $page_id ) {
-            update_option( 'classyfeds_page_id', $page_id );
-        }
-    }
-    flush_rewrite_rules();
 }
-register_activation_hook( __FILE__, 'classyfeds_aggregator_activate' );
 
 /**
- * Register settings page as top-level admin menu.
+ * Plugin activation callback + bootstrap hooks.
  */
-add_action( 'admin_menu', function() {
+class Aggregator {
+    public function register() {
+        add_action( 'init', __NAMESPACE__ . '\\register_post_type_and_taxonomy' );
+        add_action( 'admin_menu', __NAMESPACE__ . '\\register_settings_menu' );
+        add_filter( 'template_include', __NAMESPACE__ . '\\template_include' );
+        add_action( 'wp_enqueue_scripts', __NAMESPACE__ . '\\enqueue_assets' );
+        add_shortcode( 'classyfeds_listings', __NAMESPACE__ . '\\get_listings_html' );
+        add_action( 'rest_api_init', __NAMESPACE__ . '\\register_rest_routes' );
+    }
+
+    public static function activate() {
+        $page_id = (int) get_option( 'classyfeds_page_id' );
+
+        if ( $page_id && get_post( $page_id ) ) {
+            // Page already exists, rien à faire.
+        } else {
+            $page    = get_page_by_path( 'classifieds' );
+            $page_id = $page ? $page->ID : 0;
+
+            if ( ! $page_id ) {
+                $page_id = wp_insert_post( [
+                    'post_title'  => __( 'Classifieds', 'classyfeds-aggregator' ),
+                    'post_name'   => 'classifieds',
+                    'post_status' => 'publish',
+                    'post_type'   => 'page',
+                ] );
+            }
+
+            if ( $page_id ) {
+                update_option( 'classyfeds_page_id', $page_id );
+            }
+        }
+
+        flush_rewrite_rules();
+    }
+}
+
+/**
+ * Register settings menu.
+ */
+function register_settings_menu() {
     add_menu_page(
         __( 'Classifieds Aggregator', 'classyfeds-aggregator' ),
         __( 'Classifieds', 'classyfeds-aggregator' ),
         'manage_options',
         'classyfeds-aggregator',
-        'classyfeds_aggregator_settings_page',
+        __NAMESPACE__ . '\\settings_page',
         'dashicons-megaphone',
         25
     );
-} );
+}
 
 /**
- * Render settings page for selecting the aggregator page.
+ * Render settings page.
  */
-function classyfeds_aggregator_settings_page() {
+function settings_page() {
     if ( ! current_user_can( 'manage_options' ) ) {
         return;
     }
 
-    $message            = '';
-    $current_page       = (int) get_option( 'classyfeds_page_id' );
-    $remote_inbox       = get_option( 'classyfeds_remote_inbox', '' );
-    $filter_categories  = get_option( 'classyfeds_filter_categories', '' );
-    $filter_posts       = (int) get_option( 'classyfeds_filter_posts', 0 );
+    $message           = '';
+    $current_page      = (int) get_option( 'classyfeds_page_id' );
+    $remote_inbox      = get_option( 'classyfeds_remote_inbox', '' );
+    $filter_categories = get_option( 'classyfeds_filter_categories', '' );
+    $filter_posts      = (int) get_option( 'classyfeds_filter_posts', 0 );
 
     if ( isset( $_POST['classyfeds_save'] ) && check_admin_referer( 'classyfeds_save_settings', 'classyfeds_nonce' ) ) {
         $page_id = isset( $_POST['classyfeds_page_id'] ) ? absint( wp_unslash( $_POST['classyfeds_page_id'] ) ) : 0;
@@ -122,16 +135,13 @@ function classyfeds_aggregator_settings_page() {
         $filter_categories = isset( $_POST['classyfeds_filter_categories'] ) ? sanitize_text_field( wp_unslash( $_POST['classyfeds_filter_categories'] ) ) : '';
         $filter_posts      = isset( $_POST['classyfeds_filter_posts'] ) ? absint( wp_unslash( $_POST['classyfeds_filter_posts'] ) ) : 0;
 
-        if ( $page_id ) {
-            update_option( 'classyfeds_page_id', $page_id );
-        }
+        update_option( 'classyfeds_page_id', $page_id );
         update_option( 'classyfeds_remote_inbox', $remote_inbox );
         update_option( 'classyfeds_filter_categories', $filter_categories );
         update_option( 'classyfeds_filter_posts', $filter_posts );
 
-        $message = __( 'Settings saved.', 'classyfeds-aggregator' );
-
         $current_page = $page_id;
+        $message      = __( 'Settings saved.', 'classyfeds-aggregator' );
     }
 
     $page_link = $current_page ? get_permalink( $current_page ) : '';
@@ -173,9 +183,9 @@ function classyfeds_aggregator_settings_page() {
 }
 
 /**
- * Load template for the Classifieds page.
+ * Template loader for aggregator page.
  */
-add_filter( 'template_include', function( $template ) {
+function template_include( $template ) {
     $page_id = (int) get_option( 'classyfeds_page_id' );
     if ( $page_id && (int) get_queried_object_id() === $page_id ) {
         $new_template = plugin_dir_path( __FILE__ ) . 'templates/aggregator-page.php';
@@ -184,12 +194,12 @@ add_filter( 'template_include', function( $template ) {
         }
     }
     return $template;
-} );
+}
 
 /**
  * Enqueue frontend assets for the Classifieds page.
  */
-add_action( 'wp_enqueue_scripts', function() {
+function enqueue_assets() {
     $page_id = (int) get_option( 'classyfeds_page_id' );
     if ( $page_id && (int) get_queried_object_id() === $page_id ) {
         wp_enqueue_style( 'classyfeds', plugin_dir_url( __FILE__ ) . 'assets/css/classyfeds.css', [], '0.1.0' );
@@ -205,20 +215,18 @@ add_action( 'wp_enqueue_scripts', function() {
             ]
         );
     }
-} );
+}
 
 /**
- * Render aggregated listings HTML for template and shortcode.
- *
- * @return string HTML output.
+ * Render aggregated listings HTML.
  */
-function classyfeds_aggregator_get_listings_html() {
+function get_listings_html() {
     $post_types = [ 'ap_object' ];
     if ( post_type_exists( 'listing' ) ) {
         $post_types[] = 'listing';
     }
 
-    $query = new WP_Query(
+    $query = new \WP_Query(
         [
             'post_type'      => $post_types,
             'post_status'    => 'publish',
@@ -274,18 +282,16 @@ function classyfeds_aggregator_get_listings_html() {
     return ob_get_clean();
 }
 
-add_shortcode( 'classyfeds_listings', 'classyfeds_aggregator_get_listings_html' );
-
 /**
- * Register ActivityPub REST endpoints.
+ * Register REST API routes.
  */
-add_action( 'rest_api_init', function() {
+function register_rest_routes() {
     register_rest_route(
         'classyfeds/v1',
         '/inbox',
         [
-            'methods'             => WP_REST_Server::CREATABLE,
-            'callback'            => 'classyfeds_aggregator_inbox_handler',
+            'methods'             => \WP_REST_Server::CREATABLE,
+            'callback'            => __NAMESPACE__ . '\\inbox_handler',
             'permission_callback' => '__return_true',
         ]
     );
@@ -294,26 +300,21 @@ add_action( 'rest_api_init', function() {
         'classyfeds/v1',
         '/listings',
         [
-            'methods'             => WP_REST_Server::READABLE,
-            'callback'            => 'classyfeds_aggregator_listings_handler',
+            'methods'             => \WP_REST_Server::READABLE,
+            'callback'            => __NAMESPACE__ . '\\listings_handler',
             'permission_callback' => '__return_true',
         ]
     );
-} );
+}
 
 /**
- * Handle incoming ActivityPub objects and store them as "ap_object" posts.
- *
- * Supports bare objects as well as "Create" activities.
- *
- * @param WP_REST_Request $request Request object.
- * @return WP_REST_Response Response.
+ * Handle incoming ActivityPub objects.
  */
-function classyfeds_aggregator_inbox_handler( WP_REST_Request $request ) {
+function inbox_handler( \WP_REST_Request $request ) {
     $activity = $request->get_json_params();
 
     if ( empty( $activity ) || ! is_array( $activity ) ) {
-        return new WP_REST_Response( [ 'error' => 'Invalid object' ], 400 );
+        return new \WP_REST_Response( [ 'error' => 'Invalid object' ], 400 );
     }
 
     $object = $activity;
@@ -341,18 +342,16 @@ function classyfeds_aggregator_inbox_handler( WP_REST_Request $request ) {
     );
 
     if ( is_wp_error( $post_id ) ) {
-        return new WP_REST_Response( [ 'error' => 'Could not store object' ], 500 );
+        return new \WP_REST_Response( [ 'error' => 'Could not store object' ], 500 );
     }
 
-    return new WP_REST_Response( [ 'stored' => $post_id ], 202 );
+    return new \WP_REST_Response( [ 'stored' => $post_id ], 202 );
 }
 
 /**
- * Expose aggregated listings as an ActivityStreams Collection.
- *
- * @return WP_REST_Response Response.
+ * Output aggregated listings as ActivityStreams collection.
  */
-function classyfeds_aggregator_listings_handler() {
+function listings_handler() {
     $remote_inbox      = get_option( 'classyfeds_remote_inbox', '' );
     $filter_categories = get_option( 'classyfeds_filter_categories', '' );
     $filter_posts      = (int) get_option( 'classyfeds_filter_posts', 0 );
@@ -363,6 +362,7 @@ function classyfeds_aggregator_listings_handler() {
         'posts_per_page' => $filter_posts > 0 ? $filter_posts : -1,
     ];
 
+    $cats = [];
     if ( $filter_categories ) {
         $cats = array_filter( array_map( 'sanitize_title', array_map( 'trim', explode( ',', $filter_categories ) ) ) );
         if ( $cats ) {
@@ -376,7 +376,7 @@ function classyfeds_aggregator_listings_handler() {
         }
     }
 
-    $query = new WP_Query( $args );
+    $query = new \WP_Query( $args );
 
     $items = [];
 
@@ -392,7 +392,7 @@ function classyfeds_aggregator_listings_handler() {
             }
         }
 
-        $cats = wp_get_post_terms( $post->ID, 'listing_category', [ 'fields' => 'names' ] );
+        $post_cats = wp_get_post_terms( $post->ID, 'listing_category', [ 'fields' => 'names' ] );
         $items[] = [
             '@context'     => 'https://www.w3.org/ns/activitystreams',
             'id'           => get_permalink( $post ),
@@ -402,44 +402,5 @@ function classyfeds_aggregator_listings_handler() {
             'url'          => get_permalink( $post ),
             'published'    => mysql2date( 'c', $post->post_date_gmt, false ),
             'attributedTo' => home_url(),
-            'category'     => $cats,
-            'listingType'  => get_post_meta( $post->ID, '_listing_type', true ),
-        ];
-    }
-
-    if ( $remote_inbox ) {
-        $response = wp_remote_get( $remote_inbox );
-        if ( 200 === wp_remote_retrieve_response_code( $response ) ) {
-            $body = wp_remote_retrieve_body( $response );
-            $data = json_decode( $body, true );
-            if ( isset( $data['orderedItems'] ) && is_array( $data['orderedItems'] ) ) {
-                foreach ( $data['orderedItems'] as $item ) {
-                    if ( ! empty( $cats ) ) {
-                        $item_cats = [];
-                        if ( isset( $item['category'] ) ) {
-                            $item_cats = (array) $item['category'];
-                        }
-                        if ( ! array_intersect( $cats, $item_cats ) ) {
-                            continue;
-                        }
-                    }
-                    $items[] = $item;
-                }
-            }
-        }
-    }
-
-    if ( $filter_posts > 0 ) {
-        $items = array_slice( $items, 0, $filter_posts );
-    }
-
-    $collection = [
-        '@context'     => 'https://www.w3.org/ns/activitystreams',
-        'id'           => rest_url( 'classyfeds/v1/listings' ),
-        'type'         => 'OrderedCollection',
-        'totalItems'   => count( $items ),
-        'orderedItems' => $items,
-    ];
-
-    return new WP_REST_Response( $collection );
-}
+            'category'     => $post_cats,
+            'listingType'  => get_post_meta( $post->ID, '_listing_type', true
