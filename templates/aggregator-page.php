@@ -10,20 +10,69 @@ get_header();
 $filter_categories = get_option( 'classyfeds_filter_categories', '' );
 $cats             = array_filter( array_map( 'sanitize_title', array_map( 'trim', explode( ',', $filter_categories ) ) ) );
 $current_cat      = isset( $_GET['classyfeds_cat'] ) ? sanitize_title( wp_unslash( $_GET['classyfeds_cat'] ) ) : '';
+$current_term     = $current_cat ? get_term_by( 'slug', $current_cat, 'listing_category' ) : null;
 ?>
 <div id="primary" class="content-area classyfeds-aggregator">
     <?php if ( $cats ) : ?>
+        <?php
+        $top_terms = get_terms(
+            array(
+                'taxonomy'     => 'listing_category',
+                'slug'         => $cats,
+                'hide_empty'   => false,
+                'hierarchical' => true,
+                'parent'       => 0,
+            )
+        );
+
+        /**
+         * Recursively render listing categories as a nested list.
+         *
+         * @param array     $terms        Terms to render.
+         * @param WP_Term   $current_term Currently selected term.
+         */
+        if ( ! function_exists( 'classyfeds_render_terms' ) ) {
+            function classyfeds_render_terms( $terms, $current_term ) {
+                foreach ( $terms as $term ) {
+                    $link  = add_query_arg( 'classyfeds_cat', $term->slug );
+                    $class = '';
+                    if ( $current_term ) {
+                        if ( $term->term_id === $current_term->term_id ) {
+                            $class = ' class="current-cat"';
+                        } elseif ( term_is_ancestor_of( $term->term_id, $current_term->term_id, 'listing_category' ) ) {
+                            $class = ' class="current-cat-parent"';
+                        }
+                    }
+
+                    echo '<li><a href="' . esc_url( $link ) . '"' . $class . '>' . esc_html( $term->name ) . '</a>';
+
+                    $children = get_terms(
+                        array(
+                            'taxonomy'   => 'listing_category',
+                            'hide_empty' => false,
+                            'parent'     => $term->term_id,
+                        )
+                    );
+
+                    if ( ! empty( $children ) && ! is_wp_error( $children ) ) {
+                        echo '<ul>';
+                        classyfeds_render_terms( $children, $current_term );
+                        echo '</ul>';
+                    }
+
+                    echo '</li>';
+                }
+            }
+        }
+        ?>
         <nav class="classyfeds-nav">
             <ul>
                 <li><a href="<?php echo esc_url( remove_query_arg( 'classyfeds_cat' ) ); ?>" class="<?php echo $current_cat ? '' : 'current-cat'; ?>"><?php esc_html_e( 'All', 'classyfeds-aggregator' ); ?></a></li>
-                <?php foreach ( $cats as $slug ) :
-                    $term  = get_term_by( 'slug', $slug, 'listing_category' );
-                    $name  = $term ? $term->name : ucwords( str_replace( '-', ' ', $slug ) );
-                    $link  = add_query_arg( 'classyfeds_cat', $slug );
-                    $class = ( $current_cat === $slug ) ? ' class="current-cat"' : '';
-                    ?>
-                    <li><a href="<?php echo esc_url( $link ); ?>"<?php echo $class; ?>><?php echo esc_html( $name ); ?></a></li>
-                <?php endforeach; ?>
+                <?php
+                if ( ! empty( $top_terms ) && ! is_wp_error( $top_terms ) ) {
+                    classyfeds_render_terms( $top_terms, $current_term );
+                }
+                ?>
             </ul>
         </nav>
     <?php endif; ?>
