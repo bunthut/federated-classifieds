@@ -360,7 +360,7 @@ function inbox_handler( \WP_REST_Request $request ) {
 
     $object = $activity;
     if ( isset( $activity['type'] ) && 'Create' === $activity['type'] && ! empty( $activity['object'] ) ) {
-        $object = $activity['object'];
+        $object = $activity['object'] ;
     }
 
     $title = '';
@@ -427,8 +427,8 @@ function listings_handler( \WP_REST_Request $request ) {
             }
         }
 
-        $cats    = wp_get_post_terms( $post->ID, 'listing_category', [ 'fields' => 'names' ] );
-        $price   = get_post_meta( $post->ID, '_price', true );
+        $cats     = wp_get_post_terms( $post->ID, 'listing_category', [ 'fields' => 'names' ] );
+        $price    = get_post_meta( $post->ID, '_price', true );
         $shipping = get_post_meta( $post->ID, '_shipping', true );
 
         if ( empty( $price ) || empty( $shipping ) || empty( $cats ) ) {
