@@ -43,7 +43,7 @@ function register_post_type_and_taxonomy() {
 }
 
 /**
- * Plugin activation callback.
+ * Plugin activation callback + bootstrap hooks.
  */
 class Aggregator {
     public function register() {
@@ -58,7 +58,9 @@ class Aggregator {
     public static function activate() {
         $page_id = (int) get_option( 'classyfeds_page_id' );
 
-        if ( ! ( $page_id && get_post( $page_id ) ) ) {
+        if ( $page_id && get_post( $page_id ) ) {
+            // Page already exists, rien à faire.
+        } else {
             $page    = get_page_by_path( 'classifieds' );
             $page_id = $page ? $page->ID : 0;
 
@@ -75,6 +77,7 @@ class Aggregator {
                 update_option( 'classyfeds_page_id', $page_id );
             }
         }
+
         flush_rewrite_rules();
     }
 }
@@ -194,7 +197,7 @@ function template_include( $template ) {
 }
 
 /**
- * Enqueue frontend assets.
+ * Enqueue frontend assets for the Classifieds page.
  */
 function enqueue_assets() {
     $page_id = (int) get_option( 'classyfeds_page_id' );
@@ -359,6 +362,7 @@ function listings_handler() {
         'posts_per_page' => $filter_posts > 0 ? $filter_posts : -1,
     ];
 
+    $cats = [];
     if ( $filter_categories ) {
         $cats = array_filter( array_map( 'sanitize_title', array_map( 'trim', explode( ',', $filter_categories ) ) ) );
         if ( $cats ) {
@@ -388,7 +392,7 @@ function listings_handler() {
             }
         }
 
-        $cats = wp_get_post_terms( $post->ID, 'listing_category', [ 'fields' => 'names' ] );
+        $post_cats = wp_get_post_terms( $post->ID, 'listing_category', [ 'fields' => 'names' ] );
         $items[] = [
             '@context'     => 'https://www.w3.org/ns/activitystreams',
             'id'           => get_permalink( $post ),
@@ -398,48 +402,5 @@ function listings_handler() {
             'url'          => get_permalink( $post ),
             'published'    => mysql2date( 'c', $post->post_date_gmt, false ),
             'attributedTo' => home_url(),
-            'category'     => $cats,
-            'listingType'  => get_post_meta( $post->ID, '_listing_type', true ),
-        ];
-    }
-
-    if ( $remote_inbox ) {
-        $response = wp_remote_get( $remote_inbox );
-        if ( 200 === wp_remote_retrieve_response_code( $response ) ) {
-            $body = wp_remote_retrieve_body( $response );
-            $data = json_decode( $body, true );
-            if ( isset( $data['orderedItems'] ) && is_array( $data['orderedItems'] ) ) {
-                foreach ( $data['orderedItems'] as $item ) {
-                    if ( ! empty( $cats ) ) {
-                        $item_cats = [];
-                        if ( isset( $item['category'] ) ) {
-                            $item_cats = (array) $item['category'];
-                        }
-                        if ( ! array_intersect( $cats, $item_cats ) ) {
-                            continue;
-                        }
-                    }
-                    $items[] = $item;
-                }
-            }
-        }
-    }
-
-    if ( $filter_posts > 0 ) {
-        $items = array_slice( $items, 0, $filter_posts );
-    }
-
-    $collection = [
-        '@context'     => 'https://www.w3.org/ns/activitystreams',
-        'id'           => rest_url( 'classyfeds/v1/listings' ),
-        'type'         => 'OrderedCollection',
-        'totalItems'   => count( $items ),
-        'orderedItems' => $items,
-    ];
-
-    return new \WP_REST_Response( $collection );
-}
-
-$aggregator = new Aggregator();
-$aggregator->register();
-register_activation_hook( __FILE__, [ Aggregator::class, 'activate' ] );
+            'category'     => $post_cats,
+            'listingType'  => get_post_meta( $post->ID, '_listing_type', true
